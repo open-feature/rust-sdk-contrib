@@ -1,0 +1,10 @@
+[package]
+name = "rust-sdk-contrib"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rust-sdk = { git = "https://github.com/open-feature/rust-sdk", branch = "main" }
+anyhow = "1.0.40"
