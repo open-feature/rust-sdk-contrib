@@ -1,6 +1,6 @@
 
-#[path ="providers/providers.rs"]
-pub mod providers;
+#[path ="providers/flagd/flagd.rs"]
+pub mod flagd;
 
 #[cfg(test)]
 mod tests {
@@ -11,7 +11,7 @@ mod tests {
     use rust_sdk::providers::traits::FeatureProvider;
     use rust_sdk::traits::Client;
     // Local providers
-    use crate::providers;
+    use crate::flagd;
   
     
     #[test]
@@ -26,9 +26,9 @@ mod tests {
     }
     #[test]
     fn test_flagd_provider() {
-        let client = OpenFeatureClient::<providers::FlagDProvider>::new(
+        let client = OpenFeatureClient::<flagd::Provider>::new(
             "test".to_string(),
-            providers::FlagDProvider::new(),
+            flagd::Provider::new(),
         );
         let result = client.value::<i64>("flag-key-here".to_string(),
             0, client.evaluation_context() );
