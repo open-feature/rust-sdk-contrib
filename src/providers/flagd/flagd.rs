@@ -25,3 +25,24 @@ impl FeatureProvider for Provider {
         todo!()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use rust_sdk::{ClientMetadata, traits::Client};
+
+    use crate::flagd::Provider;
+
+    #[test]
+    fn test_provider() {
+
+        let provider = Provider{};
+
+        let client = rust_sdk::OpenFeatureClient::<Provider>::new(
+            "test".to_string(),
+            provider,
+        );
+
+        assert!(client.meta_data().name == "test");
+
+    }
+}
