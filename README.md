@@ -10,5 +10,8 @@ Apache 2.0 - See [LICENSE](./LICENSE) for more information.
 
 ### Prerequisites
 
+There are several CLI tools which are required to build and test the code in this repository.
+
 - buf ( brew install buf )
-- 
+- protoc-gen-prost ( cargo install protoc-gen-prost )
+- protoc-gen-tonic ( cargo install protoc-gen-tonic )

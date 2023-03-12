@@ -9,3 +9,4 @@ edition = "2021"
 rust-sdk = { git = "https://github.com/open-feature/rust-sdk", branch = "main" }
 anyhow = "1.0.40"
 protoc-gen-tonic = "0.2.2"
+protoc-gen-prost = "0.2.2"
