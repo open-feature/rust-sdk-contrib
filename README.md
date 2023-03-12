@@ -5,3 +5,10 @@ This repository is intended for OpenFeature contributions which are not included
 ## License
 
 Apache 2.0 - See [LICENSE](./LICENSE) for more information.
+
+## Development
+
+### Prerequisites
+
+- buf ( brew install buf )
+- 
