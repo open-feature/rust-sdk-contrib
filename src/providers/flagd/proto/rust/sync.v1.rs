@@ -3,7 +3,7 @@
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SyncFlagsRequest {
-    /// Optional: A unique identifier for flagd  provider (grpc client) initiating the request. The server implementations
+    /// Optional: A unique identifier for flagd provider (grpc client) initiating the request. The server implementations
     /// can utilize this identifier to aggregate flag configurations and stream them to a specific client. This identifier
     /// is intended to be optional. However server implementation may enforce it.
     #[prost(string, tag="1")]
@@ -25,6 +25,11 @@ pub struct SyncFlagsResponse {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FetchAllFlagsRequest {
+    /// Optional: A unique identifier for flagd provider (grpc client) initiating the request. The server implementations
+    /// can utilize this identifier to aggregate flag configurations and stream them to a specific client. This identifier
+    /// is intended to be optional. However server implementation may enforce it.
+    #[prost(string, tag="1")]
+    pub provider_id: ::prost::alloc::string::String,
 }
 ///   FetchAllFlagsResponse is the server response containing feature flag configurations
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -82,5 +87,6 @@ impl SyncState {
         }
     }
 }
+include!("sync.v1.serde.rs");
 include!("sync.v1.tonic.rs");
 // @@protoc_insertion_point(module)

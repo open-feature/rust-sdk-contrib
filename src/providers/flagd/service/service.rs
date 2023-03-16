@@ -1,18 +1,15 @@
 
-#[path ="src/providers/flagd/proto/rust"]
+#[path ="../proto/rust/schema.v1.tonic.rs"]
 pub mod rust;
 
-pub trait Service {
-    fn Resolve<T>() -> anyhow::Result<T>;
+pub struct ChannelService {
+    
 }
 
-impl DefaultService for Service {
-    fn new() -> Self {
-        Service {
+impl ChannelService {
+    pub fn new() -> Self {
+        ChannelService {
             
         }
-    }
-    fn Resolve<T>() -> anyhow::Result<T> {
-        Ok(T)
     }
 }

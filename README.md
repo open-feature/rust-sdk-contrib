@@ -15,3 +15,4 @@ There are several CLI tools which are required to build and test the code in thi
 - buf ( brew install buf )
 - protoc-gen-prost ( cargo install protoc-gen-prost )
 - protoc-gen-tonic ( cargo install protoc-gen-tonic )
+- protoc-gen-prost-crate ( cargo install protoc-gen-prost-crate )

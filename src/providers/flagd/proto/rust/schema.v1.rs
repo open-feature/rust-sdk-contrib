@@ -189,5 +189,6 @@ pub struct EventStreamResponse {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EventStreamRequest {
 }
+include!("schema.v1.serde.rs");
 include!("schema.v1.tonic.rs");
 // @@protoc_insertion_point(module)
