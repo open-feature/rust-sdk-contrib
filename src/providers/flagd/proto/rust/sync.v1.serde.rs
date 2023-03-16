@@ -6,14 +6,8 @@ impl serde::Serialize for FetchAllFlagsRequest {
         S: serde::Serializer,
     {
         use serde::ser::SerializeStruct;
-        let mut len = 0;
-        if !self.provider_id.is_empty() {
-            len += 1;
-        }
-        let mut struct_ser = serializer.serialize_struct("sync.v1.FetchAllFlagsRequest", len)?;
-        if !self.provider_id.is_empty() {
-            struct_ser.serialize_field("providerId", &self.provider_id)?;
-        }
+        let len = 0;
+        let struct_ser = serializer.serialize_struct("sync.v1.FetchAllFlagsRequest", len)?;
         struct_ser.end()
     }
 }
@@ -24,13 +18,10 @@ impl<'de> serde::Deserialize<'de> for FetchAllFlagsRequest {
         D: serde::Deserializer<'de>,
     {
         const FIELDS: &[&str] = &[
-            "provider_id",
-            "providerId",
         ];
 
         #[allow(clippy::enum_variant_names)]
         enum GeneratedField {
-            ProviderId,
         }
         impl<'de> serde::Deserialize<'de> for GeneratedField {
             fn deserialize<D>(deserializer: D) -> std::result::Result<GeneratedField, D::Error>
@@ -51,10 +42,7 @@ impl<'de> serde::Deserialize<'de> for FetchAllFlagsRequest {
                     where
                         E: serde::de::Error,
                     {
-                        match value {
-                            "providerId" | "provider_id" => Ok(GeneratedField::ProviderId),
-                            _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
-                        }
+                            Err(serde::de::Error::unknown_field(value, FIELDS))
                     }
                 }
                 deserializer.deserialize_identifier(GeneratedVisitor)
@@ -72,19 +60,10 @@ impl<'de> serde::Deserialize<'de> for FetchAllFlagsRequest {
                 where
                     V: serde::de::MapAccess<'de>,
             {
-                let mut provider_id__ = None;
-                while let Some(k) = map.next_key()? {
-                    match k {
-                        GeneratedField::ProviderId => {
-                            if provider_id__.is_some() {
-                                return Err(serde::de::Error::duplicate_field("providerId"));
-                            }
-                            provider_id__ = Some(map.next_value()?);
-                        }
-                    }
+                while map.next_key::<GeneratedField>()?.is_some() {
+                    let _ = map.next_value::<serde::de::IgnoredAny>()?;
                 }
                 Ok(FetchAllFlagsRequest {
-                    provider_id: provider_id__.unwrap_or_default(),
                 })
             }
         }

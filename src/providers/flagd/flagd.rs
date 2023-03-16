@@ -1,16 +1,14 @@
 use rust_sdk::providers::traits::FeatureProvider;
 
-#[path = "service/service.rs"]
-pub mod service;
-
+include!("proto/rust/mod.rs");
 pub struct Provider {
-    service: service::ChannelService,
+  
 }
 
 impl FeatureProvider for Provider {
     fn new() -> Self {
         Provider {
-            service: service::ChannelService::new(),
+            //service: service::ChannelService::new(),
         }
     }
 
@@ -36,13 +34,13 @@ impl FeatureProvider for Provider {
 mod tests {
     use rust_sdk::{ClientMetadata, traits::Client};
 
-    use crate::flagd::{Provider, service};
+    use crate::flagd::{Provider};
 
     #[test]
     fn test_provider() {
 
         let provider = Provider{
-            service: service::ChannelService::new(),
+         //   service: service::ChannelService::new(),
         };
 
         let client = rust_sdk::OpenFeatureClient::<Provider>::new(

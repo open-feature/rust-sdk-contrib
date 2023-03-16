@@ -1,16 +1,14 @@
 // @generated
 /// SyncFlagsRequest is the request initiating the sever-streaming rpc. Flagd sends this request, acting as the client
-#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SyncFlagsRequest {
-    /// Optional: A unique identifier for flagd provider (grpc client) initiating the request. The server implementations
+    /// Optional: A unique identifier for flagd  provider (grpc client) initiating the request. The server implementations
     /// can utilize this identifier to aggregate flag configurations and stream them to a specific client. This identifier
     /// is intended to be optional. However server implementation may enforce it.
     #[prost(string, tag="1")]
     pub provider_id: ::prost::alloc::string::String,
 }
 /// SyncFlagsResponse is the server response containing feature flag configurations and the state
-#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SyncFlagsResponse {
     /// flagd feature flag configuration. Must be validated to schema - <https://raw.githubusercontent.com/open-feature/schemas/main/json/flagd-definitions.json>
@@ -22,17 +20,10 @@ pub struct SyncFlagsResponse {
     pub state: i32,
 }
 /// FetchAllFlagsRequest is the request to fetch all flags. Flagd sends this request as the client in order to resync its internal state
-#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FetchAllFlagsRequest {
-    /// Optional: A unique identifier for flagd provider (grpc client) initiating the request. The server implementations
-    /// can utilize this identifier to aggregate flag configurations and stream them to a specific client. This identifier
-    /// is intended to be optional. However server implementation may enforce it.
-    #[prost(string, tag="1")]
-    pub provider_id: ::prost::alloc::string::String,
 }
 ///   FetchAllFlagsResponse is the server response containing feature flag configurations
-#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FetchAllFlagsResponse {
     /// flagd feature flag configuration. Must be validated to schema - <https://raw.githubusercontent.com/open-feature/schemas/main/json/flagd-definitions.json>
@@ -72,18 +63,6 @@ impl SyncState {
             SyncState::Update => "SYNC_STATE_UPDATE",
             SyncState::Delete => "SYNC_STATE_DELETE",
             SyncState::Ping => "SYNC_STATE_PING",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "SYNC_STATE_UNSPECIFIED" => Some(Self::Unspecified),
-            "SYNC_STATE_ALL" => Some(Self::All),
-            "SYNC_STATE_ADD" => Some(Self::Add),
-            "SYNC_STATE_UPDATE" => Some(Self::Update),
-            "SYNC_STATE_DELETE" => Some(Self::Delete),
-            "SYNC_STATE_PING" => Some(Self::Ping),
-            _ => None,
         }
     }
 }

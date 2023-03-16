@@ -1,0 +1,23 @@
+# buf.gen.yaml
+version: v1
+managed:
+  enabled: true
+plugins:
+ # Requires protoc-gen-tonic & protoc-gen-prost to enable service client creation
+  - remote: buf.build/prost/plugins/prost:v0.2.1-1
+    out: src/providers/flagd/proto/rust
+    opt:
+    - compile_well_known_types
+  - remote: buf.build/prost/plugins/serde:v0.2.1-1
+    out: src/providers/flagd/proto/rust
+  - remote: buf.build/prost/plugins/tonic:v0.2.1-1
+    out: src/providers/flagd/proto/rust 
+    opt:
+    - compile_well_known_types
+    - no_server=true
+  - name: prost-crate
+    out: .
+    strategy: all
+    opt:
+      - include_file=src/providers/flagd/proto/rust/mod.rs
+      - gen_crate
