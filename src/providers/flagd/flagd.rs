@@ -39,17 +39,20 @@ impl FeatureProvider for Provider {
 mod tests {
     use rust_sdk::{ClientMetadata, traits::Client, providers::traits::FeatureProvider};
 
-    use crate::flagd::{Provider};
+    use crate::flagd::{Provider, proto};
 
     #[test]
     fn test_provider() {
 
-        let provider = Provider::new();
+        let service_client = proto::rust::schema::v1::service_client::ServiceClient::<tonic::transport::Channel>::connect("http://[::1]:8080");
 
         let client = rust_sdk::OpenFeatureClient::<Provider>::new(
             "test".to_string(),
-            provider,
+            Provider::new(),
         );
+
+        
+        
 
         
 
