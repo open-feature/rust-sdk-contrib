@@ -66,6 +66,5 @@ impl SyncState {
         }
     }
 }
-include!("sync.v1.serde.rs");
 include!("sync.v1.tonic.rs");
 // @@protoc_insertion_point(module)

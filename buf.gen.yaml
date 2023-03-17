@@ -7,13 +7,11 @@ plugins:
   - remote: buf.build/prost/plugins/prost:v0.2.1-1
     out: src/providers/flagd/proto/rust
     opt:
-    - compile_well_known_types
-  - remote: buf.build/prost/plugins/serde:v0.2.1-1
-    out: src/providers/flagd/proto/rust
+  #  - compile_well_known_types
   - remote: buf.build/prost/plugins/tonic:v0.2.1-1
     out: src/providers/flagd/proto/rust 
     opt:
-    - compile_well_known_types
+   # - compile_well_known_types
     - no_server=true
   - name: prost-crate
     out: .

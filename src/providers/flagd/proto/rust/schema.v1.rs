@@ -4,7 +4,7 @@
 pub struct ResolveAllRequest {
     /// Object structure describing the EvaluationContext used in the flag evaluation, see <https://docs.openfeature.dev/docs/reference/concepts/evaluation-context>
     #[prost(message, optional, tag="1")]
-    pub context: ::core::option::Option<super::super::google::protobuf::Struct>,
+    pub context: ::core::option::Option<::prost_types::Struct>,
 }
 /// Response body for bulk flag evaluation, used by the ResolveAll rpc.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -38,7 +38,7 @@ pub mod any_flag {
         #[prost(double, tag="5")]
         DoubleValue(f64),
         #[prost(message, tag="6")]
-        ObjectValue(super::super::super::google::protobuf::Struct),
+        ObjectValue(::prost_types::Struct),
     }
 }
 /// Request body for boolean flag evaluation, used by the ResolveBoolean rpc.
@@ -49,7 +49,7 @@ pub struct ResolveBooleanRequest {
     pub flag_key: ::prost::alloc::string::String,
     /// Object structure describing the EvaluationContext used in the flag evaluation, see <https://docs.openfeature.dev/docs/reference/concepts/evaluation-context>
     #[prost(message, optional, tag="2")]
-    pub context: ::core::option::Option<super::super::google::protobuf::Struct>,
+    pub context: ::core::option::Option<::prost_types::Struct>,
 }
 /// Response body for boolean flag evaluation. used by the ResolveBoolean rpc.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -72,7 +72,7 @@ pub struct ResolveStringRequest {
     pub flag_key: ::prost::alloc::string::String,
     /// Object structure describing the EvaluationContext used in the flag evaluation, see <https://docs.openfeature.dev/docs/reference/concepts/evaluation-context>
     #[prost(message, optional, tag="2")]
-    pub context: ::core::option::Option<super::super::google::protobuf::Struct>,
+    pub context: ::core::option::Option<::prost_types::Struct>,
 }
 /// Response body for string flag evaluation. used by the ResolveString rpc.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -95,7 +95,7 @@ pub struct ResolveFloatRequest {
     pub flag_key: ::prost::alloc::string::String,
     /// Object structure describing the EvaluationContext used in the flag evaluation, see <https://docs.openfeature.dev/docs/reference/concepts/evaluation-context>
     #[prost(message, optional, tag="2")]
-    pub context: ::core::option::Option<super::super::google::protobuf::Struct>,
+    pub context: ::core::option::Option<::prost_types::Struct>,
 }
 /// Response body for float flag evaluation. used by the ResolveFloat rpc.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -118,7 +118,7 @@ pub struct ResolveIntRequest {
     pub flag_key: ::prost::alloc::string::String,
     /// Object structure describing the EvaluationContext used in the flag evaluation, see <https://docs.openfeature.dev/docs/reference/concepts/evaluation-context>
     #[prost(message, optional, tag="2")]
-    pub context: ::core::option::Option<super::super::google::protobuf::Struct>,
+    pub context: ::core::option::Option<::prost_types::Struct>,
 }
 /// Response body for int flag evaluation. used by the ResolveInt rpc.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -141,7 +141,7 @@ pub struct ResolveObjectRequest {
     pub flag_key: ::prost::alloc::string::String,
     /// Object structure describing the EvaluationContext used in the flag evaluation, see <https://docs.openfeature.dev/docs/reference/concepts/evaluation-context>
     #[prost(message, optional, tag="2")]
-    pub context: ::core::option::Option<super::super::google::protobuf::Struct>,
+    pub context: ::core::option::Option<::prost_types::Struct>,
 }
 /// Response body for object flag evaluation. used by the ResolveObject rpc.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -150,7 +150,7 @@ pub struct ResolveObjectResponse {
     ///
     /// NOTE: This structure will need to be decoded from google/protobuf/struct.proto before it is returned to the SDK
     #[prost(message, optional, tag="1")]
-    pub value: ::core::option::Option<super::super::google::protobuf::Struct>,
+    pub value: ::core::option::Option<::prost_types::Struct>,
     /// The reason for the given return value, see <https://docs.openfeature.dev/docs/specification/types#resolution-details>
     #[prost(string, tag="2")]
     pub reason: ::prost::alloc::string::String,
@@ -167,12 +167,11 @@ pub struct EventStreamResponse {
     /// Object structure for use when sending relevant metadata to provide context to the event.
     /// Can be left unset when it is not required.
     #[prost(message, optional, tag="2")]
-    pub data: ::core::option::Option<super::super::google::protobuf::Struct>,
+    pub data: ::core::option::Option<::prost_types::Struct>,
 }
 /// Empty stream request body
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EventStreamRequest {
 }
-include!("schema.v1.serde.rs");
 include!("schema.v1.tonic.rs");
 // @@protoc_insertion_point(module)
