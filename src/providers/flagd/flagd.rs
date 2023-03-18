@@ -39,24 +39,28 @@ impl FeatureProvider for Provider {
 mod tests {
     use rust_sdk::{ClientMetadata, traits::Client, providers::traits::FeatureProvider};
 
-    use crate::flagd::{Provider, proto};
+    use crate::flagd::{Provider, proto::{self, rust::schema::v1::{ResolveStringRequest, ResolveAllRequest, ResolveBooleanRequest}}};
 
-    #[test]
-    fn test_provider() {
+    
+    #[tokio::test]
+    async fn test_provider() {
 
-        let service_client = proto::rust::schema::v1::service_client::ServiceClient::<tonic::transport::Channel>::connect("http://[::1]:8080");
+        let svc =
+         proto::rust::schema::v1::service_client::ServiceClient::<tonic::transport::Channel>::connect("http://0.0.0.0:8013");
 
         let client = rust_sdk::OpenFeatureClient::<Provider>::new(
             "test".to_string(),
             Provider::new(),
         );
 
-        
-        
+        let mut client = svc.await.unwrap();
 
-        
+        let result = client.resolve_boolean(ResolveBooleanRequest {
+            flag_key: "myFlag".to_string(),
+            context: None,
+        }).await.unwrap();
 
-        assert!(client.meta_data().name == "test");
-
+       print!("{:?}", result)
+     
     }
 }

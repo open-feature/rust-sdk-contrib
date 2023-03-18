@@ -15,6 +15,7 @@ tonic = "0.8.3"
 prost-build = "0.11.8"
 protobuf = "3.2.0"
 prost-types = "0.11.8"
+tokio = { version = "1.11.0", features = ["full"] }
 [features]
 default = ["schema-v1", "sync-v1"]
 # @@protoc_deletion_point(features)
