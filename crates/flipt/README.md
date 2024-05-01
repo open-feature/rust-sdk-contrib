@@ -9,7 +9,7 @@ This provider is an implementation on top of the official [Flipt Rust Server Sid
 Add the following line to Cargo.toml
 
 ```
-openfeature-flipt="0.1.0"
+open-feature-flipt="0.1.0"
 ```
 
 ## Note
