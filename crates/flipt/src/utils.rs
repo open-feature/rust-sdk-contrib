@@ -39,19 +39,20 @@ pub(crate) fn serde_to_openfeature_value(v: serde_json::Value) -> Result<Value, 
     match v {
         serde_json::Value::Bool(b) => Ok(Value::Bool(b)),
         serde_json::Value::Number(n) => {
-            if n.is_i64() {
-                Ok(Value::Int(n.as_i64().unwrap()))
+            let opt = if n.is_i64() {
+                n.as_i64().map(Value::Int)
             } else if n.is_f64() {
-                Ok(Value::Float(n.as_f64().unwrap()))
+                n.as_f64().map(Value::Float)
             } else {
-                Err(EvaluationError {
-                    code: EvaluationErrorCode::General("Parse error in JSON".to_owned()),
-                    message: Some(format!(
-                        "Expected a number of type i64 or f64, but found `{}`",
-                        n
-                    )),
-                })
-            }
+                None
+            };
+            opt.map(Ok).unwrap_or(Err(EvaluationError {
+                code: EvaluationErrorCode::General("Parse error in JSON".to_owned()),
+                message: Some(format!(
+                    "Expected a number of type i64 or f64, but found `{}`",
+                    n
+                )),
+            }))
         }
         serde_json::Value::String(s) => Ok(Value::String(s)),
         serde_json::Value::Null => Err(EvaluationError {

@@ -64,8 +64,7 @@ impl FeatureProvider for FliptProvider {
         flag_key: &str,
         ctx: &EvaluationContext,
     ) -> EvaluationResult<ResolutionDetails<bool>> {
-        let res = match self
-            .client
+        self.client
             .evaluation
             .boolean(&EvaluationRequest {
                 namespace_key: self.namespace.clone(),
@@ -78,12 +77,8 @@ impl FeatureProvider for FliptProvider {
                 reference: None,
             })
             .await
-        {
-            Ok(r) => r,
-            Err(e) => return Err(translate_error(e)),
-        };
-
-        EvaluationResult::Ok(ResolutionDetails::new(res.enabled))
+            .map_err(translate_error)
+            .map(|v| ResolutionDetails::new(v.enabled))
     }
 
     async fn resolve_int_value(
@@ -91,10 +86,7 @@ impl FeatureProvider for FliptProvider {
         flag_key: &str,
         ctx: &EvaluationContext,
     ) -> EvaluationResult<ResolutionDetails<i64>> {
-        let res = match variant_helper(self, flag_key, ctx).await {
-            Ok(r) => r,
-            Err(e) => return Err(e),
-        };
+        let res = variant_helper(self, flag_key, ctx).await?;
         // parse a variant key as i64
         res.variant_key
             .parse::<i64>()
@@ -113,10 +105,7 @@ impl FeatureProvider for FliptProvider {
         flag_key: &str,
         ctx: &EvaluationContext,
     ) -> EvaluationResult<ResolutionDetails<f64>> {
-        let res = match variant_helper(self, flag_key, ctx).await {
-            Ok(r) => r,
-            Err(e) => return Err(e),
-        };
+        let res = variant_helper(self, flag_key, ctx).await?;
         // parse a variant key as f64
         res.variant_key
             .parse::<f64>()
@@ -135,10 +124,7 @@ impl FeatureProvider for FliptProvider {
         flag_key: &str,
         ctx: &EvaluationContext,
     ) -> EvaluationResult<ResolutionDetails<String>> {
-        let res = match variant_helper(self, flag_key, ctx).await {
-            Ok(r) => r,
-            Err(e) => return Err(e),
-        };
+        let res = variant_helper(self, flag_key, ctx).await?;
         // parse a variant key as i64
         Ok(ResolutionDetails::new(res.variant_key))
     }
@@ -148,12 +134,8 @@ impl FeatureProvider for FliptProvider {
         flag_key: &str,
         ctx: &EvaluationContext,
     ) -> Result<ResolutionDetails<StructValue>, EvaluationError> {
-        let res = match variant_helper(self, flag_key, ctx).await {
-            Ok(r) => r,
-            Err(e) => return Err(e),
-        };
+        let res = variant_helper(self, flag_key, ctx).await?;
         // parse a variant attachment as a struct value
-        dbg!(&res.variant_attachment);
         let v = parse_json(&res.variant_attachment)?;
         if let Value::Struct(sv) = v {
             Ok(ResolutionDetails::new(sv))
@@ -174,7 +156,7 @@ async fn variant_helper(
     flag_key: &str,
     ctx: &EvaluationContext,
 ) -> Result<VariantEvaluationResponse, EvaluationError> {
-    match provider
+    provider
         .client
         .evaluation
         .variant(&EvaluationRequest {
@@ -188,8 +170,5 @@ async fn variant_helper(
             reference: None,
         })
         .await
-    {
-        Ok(r) => Ok(r),
-        Err(e) => return Err(translate_error(e)),
-    }
+        .map_err(translate_error)
 }
