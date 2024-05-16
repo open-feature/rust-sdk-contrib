@@ -80,7 +80,7 @@ impl FeatureProvider for EnvVarProvider {
     /// #[tokio::test]
     /// async fn test_resolve_int_value() {
     ///     let flag_key = "TEST_INT_ENV_VAR";
-    ///     let flag_value = std::i64::MAX.to_string();
+    ///     let flag_value = i64::MAX.to_string();
     ///     let provider = EnvVarProvider::default();
     ///     std::env::set_var(flag_key, &flag_value);
     ///     let result = provider.resolve_int_value(flag_key, &EvaluationContext::default()).await;

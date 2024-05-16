@@ -47,7 +47,7 @@ open-feature-env-var = "0.1.0"
 
 ## Testing
 
-Run `cargo test` to excecute tests.
+Run `cargo test` to execute tests.
 
 ## Maintainers
 
