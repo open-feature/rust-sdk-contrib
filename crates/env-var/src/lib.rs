@@ -179,7 +179,7 @@ fn evaluate_environment_variable<T: std::str::FromStr>(
     match std::env::var(flag_key) {
         Ok(value) => match value.parse::<T>() {
             Ok(parsed_value) => {
-                return EvaluationResult::Ok(
+                EvaluationResult::Ok(
                     ResolutionDetails::builder()
                         .value(parsed_value)
                         .reason(EvaluationReason::Static)
@@ -187,13 +187,13 @@ fn evaluate_environment_variable<T: std::str::FromStr>(
                 )
             }
             Err(_) => {
-                return error(EvaluationErrorCode::TypeMismatch);
+                error(EvaluationErrorCode::TypeMismatch)
             }
         },
         Err(_) => {
-            return error(EvaluationErrorCode::FlagNotFound);
+            error(EvaluationErrorCode::FlagNotFound)
         }
-    };
+    }
 }
 /// Error helper function to return an [`EvaluationResult`] with an [`EvaluationError`]
 /// # Example
