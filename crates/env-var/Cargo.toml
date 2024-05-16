@@ -16,3 +16,9 @@ async-trait = "0.1.80"
 
 [dev-dependencies]
 tokio = { version = "1.37.0", features = ["full"] }
+cucumber = "0.21.0"
+futures = "0.3"
+
+[[test]]
+name = "example"
+harness = false  # allows Cucumber to print output instead of libtest

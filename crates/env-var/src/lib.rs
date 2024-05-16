@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use open_feature::{
     provider::{FeatureProvider, ProviderMetadata, ResolutionDetails},
-    EvaluationContext, EvaluationError, EvaluationErrorCode, EvaluationResult, StructValue,
+    EvaluationContext, EvaluationError, EvaluationErrorCode, EvaluationReason, EvaluationResult,
+    StructValue,
 };
 /// Environment Variables Provider Metadata
 const METADATA: &str = "Environment Variables Provider";
@@ -17,6 +18,7 @@ const METADATA: &str = "Environment Variables Provider";
 /// - Struct (not supported)
 ///
 /// The provider will return [`EvaluationResult::Err(EvaluationError)`] if the flag is not found or if the value is not of the expected type.
+#[derive(Debug)]
 pub struct EnvVarProvider {
     metadata: ProviderMetadata,
 }
@@ -71,6 +73,7 @@ impl FeatureProvider for EnvVarProvider {
     ) -> EvaluationResult<ResolutionDetails<bool>> {
         return evaluate_environment_variable(flag_key, _evaluation_context);
     }
+
     /// The 64-bit signed integer type.
     /// # Example
     /// ```rust
@@ -157,13 +160,32 @@ impl FeatureProvider for EnvVarProvider {
     }
 }
 
+/// Helper function to evaluate the environment variable
+/// # Example
+/// ```rust
+/// #[tokio::test]
+/// async fn test_evaluate_environment_variable() {
+///    let provider = EnvVarProvider::default();
+///    let flag_key = "TEST_ENV_VAR_NOT_FOUND";
+/// let res = evaluate_environment_variable(flag_key, &EvaluationContext::default());
+/// assert!(res.is_err());
+/// assert_eq!(res.unwrap_err().code, EvaluationErrorCode::FlagNotFound);
+/// }
+/// ```
 fn evaluate_environment_variable<T: std::str::FromStr>(
     flag_key: &str,
     _evaluation_context: &EvaluationContext,
 ) -> EvaluationResult<ResolutionDetails<T>> {
-    let res = match std::env::var(flag_key) {
+    match std::env::var(flag_key) {
         Ok(value) => match value.parse::<T>() {
-            Ok(parsed_value) => parsed_value,
+            Ok(parsed_value) => {
+                return EvaluationResult::Ok(
+                    ResolutionDetails::builder()
+                        .value(parsed_value)
+                        .reason(EvaluationReason::Static)
+                        .build(),
+                )
+            }
             Err(_) => {
                 return error(EvaluationErrorCode::TypeMismatch);
             }
@@ -172,7 +194,6 @@ fn evaluate_environment_variable<T: std::str::FromStr>(
             return error(EvaluationErrorCode::FlagNotFound);
         }
     };
-    EvaluationResult::Ok(ResolutionDetails::new(res))
 }
 /// Error helper function to return an [`EvaluationResult`] with an [`EvaluationError`]
 /// # Example
@@ -188,6 +209,7 @@ fn evaluate_environment_variable<T: std::str::FromStr>(
 /// ```
 fn error<T>(evaluation_error_code: EvaluationErrorCode) -> EvaluationResult<T> {
     Err(EvaluationError::builder()
+        .message("Error evaluating environment variable")
         .code(evaluation_error_code)
         .build())
 }
@@ -198,162 +220,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn metadata_name() {
+    fn test_metadata() {
         let provider = EnvVarProvider::default();
         assert_eq!(provider.metadata().name, "Environment Variables Provider");
     }
 
     #[tokio::test]
-    async fn test_resolve_string_value() {
+    async fn resolve_err_values() {
         let provider = EnvVarProvider::default();
-        let flag_key = "TEST_ENV_VAR";
-        let value = "flag_value";
-        std::env::set_var(flag_key, value);
+        let context = EvaluationContext::default();
 
-        let res = provider
-            .resolve_string_value(flag_key, &EvaluationContext::default())
-            .await;
-        assert!(res.is_ok());
-        assert_eq!(res.unwrap().value, value);
-        std::env::remove_var(flag_key);
-    }
-
-    #[tokio::test]
-    async fn test_resolve_string_value_not_found() {
-        let provider = EnvVarProvider::default();
-        let flag_key = "TEST_ENV_VAR_NOT_FOUND";
-        let res = provider
-            .resolve_string_value(flag_key, &EvaluationContext::default())
-            .await;
-        assert!(res.is_err());
-        assert_eq!(res.unwrap_err().code, EvaluationErrorCode::FlagNotFound);
-    }
-
-    #[tokio::test]
-    async fn test_resolve_string_value_empty() {
-        let provider = EnvVarProvider::default();
-        let flag_key = "TEST_ENV_VAR_EMPTY";
-        let value = "";
-        std::env::set_var(flag_key, value);
-
-        let res = provider
-            .resolve_string_value(flag_key, &EvaluationContext::default())
-            .await;
-        assert!(res.is_ok());
-        assert_eq!(res.unwrap().value, value);
-        std::env::remove_var(flag_key);
-    }
-
-    #[tokio::test]
-    async fn test_resolve_bool_value() {
-        let flag_key = "TEST_BOOL_ENV_VAR";
-        let provider = EnvVarProvider::default();
-        for &flag_value in &["true", "false"] {
-            std::env::set_var(flag_key, flag_value);
-
-            let result = provider
-                .resolve_bool_value(flag_key, &EvaluationContext::default())
-                .await;
-            assert!(result.is_ok());
-
-            std::env::remove_var(flag_key);
-        }
-    }
-
-    #[tokio::test]
-    async fn test_resolve_bool_value_not_found() {
-        let provider = EnvVarProvider::default();
-        let flag_key = "TEST_BOOL_ENV_VAR_NOT_FOUND";
-        let res = provider
-            .resolve_bool_value(flag_key, &EvaluationContext::default())
-            .await;
-        assert!(res.is_err());
-        assert_eq!(res.unwrap_err().code, EvaluationErrorCode::FlagNotFound);
-    }
-
-    #[tokio::test]
-    async fn test_resolve_bool_value_invalid() {
-        let flag_key = "TEST_BOOL_ENV_VAR_INVALID";
-        let provider = EnvVarProvider::default();
-        for &flag_value in &["1", "0", "FALSE", "TRUE", "False", "True"] {
-            std::env::set_var(flag_key, flag_value);
-
-            let res = provider
-                .resolve_bool_value(flag_key, &EvaluationContext::default())
-                .await;
-            assert!(res.is_err());
-            assert_eq!(res.unwrap_err().code, EvaluationErrorCode::TypeMismatch);
-            std::env::remove_var(flag_key);
-        }
-    }
-
-    #[tokio::test]
-    async fn test_resolve_float_value() {
-        let flag_key = "TEST_FLOAT_ENV_VAR";
-        let flag_value = std::f64::consts::PI.to_string();
-        let provider = EnvVarProvider::default();
-
-        std::env::set_var(flag_key, &flag_value);
-
-        let result = provider
-            .resolve_float_value(flag_key, &EvaluationContext::default())
-            .await;
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().value, flag_value.parse::<f64>().unwrap());
-
-        std::env::remove_var(flag_key);
-    }
-
-    #[tokio::test]
-    async fn test_resolve_float_value_not_found() {
-        let provider = EnvVarProvider::default();
-        let flag_key = "TEST_FLOAT_ENV_VAR_NOT_FOUND";
-        let res = provider
-            .resolve_float_value(flag_key, &EvaluationContext::default())
-            .await;
-        assert!(res.is_err());
-        assert_eq!(res.unwrap_err().code, EvaluationErrorCode::FlagNotFound);
-    }
-
-    #[tokio::test]
-    async fn test_resolve_int_value() {
-        let flag_key = "TEST_INT_ENV_VAR";
-        let flag_value = std::i64::MAX.to_string();
-        let provider = EnvVarProvider::default();
-
-        std::env::set_var(flag_key, &flag_value);
-
-        let result = provider
-            .resolve_int_value(flag_key, &EvaluationContext::default())
-            .await;
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().value, flag_value.parse::<i64>().unwrap());
-
-        std::env::remove_var(flag_key);
-    }
-
-    #[tokio::test]
-    async fn test_resolve_int_value_not_found() {
-        let provider = EnvVarProvider::default();
-        let flag_key = "TEST_INT_ENV_VAR_NOT_FOUND";
-        let res = provider
-            .resolve_int_value(flag_key, &EvaluationContext::default())
-            .await;
-        assert!(res.is_err());
-        assert_eq!(res.unwrap_err().code, EvaluationErrorCode::FlagNotFound);
-    }
-
-    #[tokio::test]
-    async fn test_resolve_struct_value() {
-        let provider = EnvVarProvider::default();
-        let flag_key = "TEST_STRUCT_ENV_VAR";
-        let res = provider
-            .resolve_struct_value(flag_key, &EvaluationContext::default())
-            .await;
-        assert!(res.is_err());
-        assert_eq!(
-            res.unwrap_err().code,
-            EvaluationErrorCode::General("Structs are not supported".to_string())
-        );
+        assert!(provider.resolve_bool_value("", &context).await.is_err());
+        assert!(provider.resolve_int_value("", &context).await.is_err());
+        assert!(provider.resolve_float_value("", &context).await.is_err());
+        assert!(provider.resolve_string_value("", &context).await.is_err());
+        assert!(provider.resolve_struct_value("", &context).await.is_err());
     }
 }
