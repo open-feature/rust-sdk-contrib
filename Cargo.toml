@@ -10,5 +10,6 @@ edition = "2021"
 [workspace]
 
 members = [
-    "crates/flagd"
+    "crates/flagd",
+    "crates/flipt"
 ]
