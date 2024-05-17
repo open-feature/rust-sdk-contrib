@@ -29,20 +29,18 @@ open-feature-env-var = "0.1.0"
 ## Example
 
 ```rust
- async fn test_resolve_bool_value() {
-        let flag_key = "TEST_BOOL_ENV_VAR";
-        let provider = EnvVarProvider::default();
-        for &flag_value in &["true", "false"] {
-            std::env::set_var(flag_key, flag_value);
 
-            let result = provider
-                .resolve_bool_value(flag_key, &EvaluationContext::default())
-                .await;
-            assert!(result.is_ok());
+let mut api = OpenFeature::singleton_mut().await;
+let provider  = EnvVarProvider::default();
+api.set_provider(provider).await;
+let client = api.create_named_client("env-var-client");
 
-            std::env::remove_var(flag_key);
-        }
-    }
+let mut message =  "Hello rustaceans!";
+let is_feature_enabled = client.get_bool_value("env-flag-key", &EvaluationContext::default(), None).await.unwrap_or(false);
+
+if is_feature_enabled {
+    message = "Hello rustaceans from feature flag!";
+}
 ```
 
 ## Testing
