@@ -69,9 +69,9 @@ impl FeatureProvider for EnvVarProvider {
     async fn resolve_bool_value(
         &self,
         flag_key: &str,
-        _evaluation_context: &EvaluationContext,
+        evaluation_context: &EvaluationContext,
     ) -> EvaluationResult<ResolutionDetails<bool>> {
-        return evaluate_environment_variable(flag_key, _evaluation_context);
+        return evaluate_environment_variable(flag_key, evaluation_context);
     }
 
     /// The 64-bit signed integer type.
