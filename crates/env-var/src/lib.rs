@@ -91,9 +91,9 @@ impl FeatureProvider for EnvVarProvider {
     async fn resolve_int_value(
         &self,
         flag_key: &str,
-        _evaluation_context: &EvaluationContext,
+        evaluation_context: &EvaluationContext,
     ) -> EvaluationResult<ResolutionDetails<i64>> {
-        return evaluate_environment_variable(flag_key, _evaluation_context);
+        return evaluate_environment_variable(flag_key, evaluation_context);
     }
 
     /// A 64-bit floating point type
@@ -118,9 +118,9 @@ impl FeatureProvider for EnvVarProvider {
     async fn resolve_float_value(
         &self,
         flag_key: &str,
-        _evaluation_context: &EvaluationContext,
+        evaluation_context: &EvaluationContext,
     ) -> EvaluationResult<ResolutionDetails<f64>> {
-        return evaluate_environment_variable(flag_key, _evaluation_context);
+        return evaluate_environment_variable(flag_key, evaluation_context);
     }
 
     /// A UTF-8 encoded string.
@@ -143,9 +143,9 @@ impl FeatureProvider for EnvVarProvider {
     async fn resolve_string_value(
         &self,
         flag_key: &str,
-        _evaluation_context: &EvaluationContext,
+        evaluation_context: &EvaluationContext,
     ) -> EvaluationResult<ResolutionDetails<String>> {
-        return evaluate_environment_variable(flag_key, _evaluation_context);
+        return evaluate_environment_variable(flag_key, evaluation_context);
     }
 
     /// Structured data, presented however is idiomatic in the implementation language, such as JSON or YAML.
