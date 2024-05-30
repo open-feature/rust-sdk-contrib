@@ -10,6 +10,7 @@ edition = "2021"
 [workspace]
 
 members = [
+    "crates/env-var",
     "crates/flagd",
     "crates/flipt"
 ]
