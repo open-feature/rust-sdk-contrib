@@ -178,21 +178,15 @@ fn evaluate_environment_variable<T: std::str::FromStr>(
 ) -> EvaluationResult<ResolutionDetails<T>> {
     match std::env::var(flag_key) {
         Ok(value) => match value.parse::<T>() {
-            Ok(parsed_value) => {
-                EvaluationResult::Ok(
-                    ResolutionDetails::builder()
-                        .value(parsed_value)
-                        .reason(EvaluationReason::Static)
-                        .build(),
-                )
-            }
-            Err(_) => {
-                error(EvaluationErrorCode::TypeMismatch)
-            }
+            Ok(parsed_value) => EvaluationResult::Ok(
+                ResolutionDetails::builder()
+                    .value(parsed_value)
+                    .reason(EvaluationReason::Static)
+                    .build(),
+            ),
+            Err(_) => error(EvaluationErrorCode::TypeMismatch),
         },
-        Err(_) => {
-            error(EvaluationErrorCode::FlagNotFound)
-        }
+        Err(_) => error(EvaluationErrorCode::FlagNotFound),
     }
 }
 /// Error helper function to return an [`EvaluationResult`] with an [`EvaluationError`]
