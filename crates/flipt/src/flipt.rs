@@ -18,11 +18,15 @@ pub struct Config<A>
 where
     A: flipt::AuthenticationStrategy,
 {
+    /// The URL of the Flipt server
     pub url: String,
+    /// The authentication strategy to use
     pub authentication_strategy: A,
+    /// Timeout in seconds
     pub timeout: u64,
 }
 
+/// A feature provider that uses Flipt as a backend
 pub struct FliptProvider {
     metadata: ProviderMetadata,
     client: flipt::api::FliptClient,
@@ -30,6 +34,7 @@ pub struct FliptProvider {
 }
 
 impl FliptProvider {
+    /// Create a new Flipt provider
     pub fn new<A: flipt::AuthenticationStrategy>(
         namespace: String,
         config: Config<A>,
@@ -39,7 +44,11 @@ impl FliptProvider {
             Err(e) => return Err(e.to_string()),
         };
 
-        let flipt_config = flipt::Config::new(url, config.authentication_strategy, config.timeout);
+        let flipt_config = flipt::ConfigBuilder::<A>::default()
+            .with_endpoint(url.clone())
+            .with_auth_strategy(config.authentication_strategy)
+            .with_timeout(std::time::Duration::from_secs(config.timeout))
+            .build();
         let client = match flipt::api::FliptClient::new(flipt_config) {
             Ok(fpconfig) => fpconfig,
             Err(e) => return Err(e.to_string()),
@@ -97,7 +106,7 @@ impl FeatureProvider for FliptProvider {
                     res.variant_attachment, e
                 )),
             })
-            .map(|v| ResolutionDetails::new(v))
+            .map(ResolutionDetails::new)
     }
 
     async fn resolve_float_value(
@@ -116,7 +125,7 @@ impl FeatureProvider for FliptProvider {
                     res.variant_attachment, e
                 )),
             })
-            .map(|v| ResolutionDetails::new(v))
+            .map(ResolutionDetails::new)
     }
 
     async fn resolve_string_value(
