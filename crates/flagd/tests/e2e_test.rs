@@ -2,11 +2,12 @@ use common::{Flagd, FLAGD_CONFIG, FLAGD_OFREP_PORT, FLAGD_PORT};
 use open_feature_flagd::{FlagdOptions, FlagdProvider, ResolverType};
 use open_feature::provider::FeatureProvider;
 use open_feature::{EvaluationContext, Value};
+use test_log::test;
 use testcontainers::runners::AsyncRunner;
 
 mod common;
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_rpc_provider() {
     let flagd = Flagd::new()
         .with_config(FLAGD_CONFIG)
@@ -56,7 +57,7 @@ async fn test_rpc_provider() {
     );
 }
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_rest_provider() {
     let flagd = Flagd::new()
         .with_config(FLAGD_CONFIG)

@@ -4,23 +4,38 @@
 //! A Rust implementation of the OpenFeature provider for flagd, enabling dynamic
 //! feature flag evaluation in your applications.
 //!
+//! This provider supports multiple evaluation modes, advanced targeting rules, caching strategies,
+//! and connection management. It is designed to work seamlessly with the OpenFeature SDK and the flagd service.
+//!
 //! ## Core Features
 //!
-//! * **Multiple Evaluation Modes**
-//!   - RPC: High-performance gRPC-based evaluation with streaming support
-//!   - REST: HTTP/OFREP protocol support with structured responses
-//!   - In-Process: Embedded evaluation engine with file and gRPC sources
+//! - **Multiple Evaluation Modes**
+//!     - **RPC Resolver (Remote Evaluation):** Uses gRPC to perform flag evaluations remotely at a flagd instance. Supports bi-directional streaming, retry backoff, and custom name resolution (including Envoy support).
+//!     - **REST Resolver:** Uses the OpenFeature Remote Evaluation Protocol (OFREP) over HTTP to evaluate flags.
+//!     - **In-Process Resolver:** Performs evaluations locally using an embedded evaluation engine. Flag configurations can be retrieved via gRPC (sync mode) or from a file (offline mode).
+//!     - **Offline Resolver:** Operates entirely from a flag definition file, updating on file changes in a best-effort manner.
 //!
-//! * **Advanced Targeting**
-//!   - Semantic versioning comparisons
-//!   - String operations (startsWith, endsWith)
-//!   - Fractional rollouts with consistent hashing
-//!   - Complex targeting rules with nested conditions
+//! - **Advanced Targeting**
+//!     - **Fractional Rollouts:** Uses consistent hashing (implemented via murmurhash3) to split traffic between flag variants in configurable proportions.
+//!     - **Semantic Versioning:** Compare values using common operators such as '=', '!=', '<', '<=', '>', '>=', '^', and '~'.
+//!     - **String Operations:** Custom operators for performing “starts_with” and “ends_with” comparisons.
+//!     - **Complex Targeting Rules:** Leverages JSONLogic and custom operators to support nested conditions and dynamic evaluation.
 //!
-//! * **Caching Strategies**
-//! * **Connection Management**
+//! - **Caching Strategies**
+//!     - Built-in support for LRU caching as well as an in-memory alternative. Flag evaluation results can be cached and later returned with a “CACHED” reason until the configuration updates.
 //!
-//! ## Quick Start
+//! - **Connection Management**
+//!     - Automatic connection establishment with configurable retries, timeout settings, and custom TLS or Unix-socket options.
+//!     - Support for upstream name resolution including a custom resolver for Envoy proxy integration.
+//!
+//! ## Installation
+//! Add the dependency in your `Cargo.toml`:
+//! ```toml
+//! [dependencies]
+//! open-feature-flagd = "0.0.1"
+//! open-feature = "0.2"
+//! ```
+//! Then integrate it into your application:
 //!
 //! ```rust,no_run
 //! use open_feature_flagd::{FlagdOptions, FlagdProvider, ResolverType};
@@ -29,7 +44,7 @@
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     // Connect to flagd service using REST
+//!     // Example using the REST resolver mode.
 //!     let provider = FlagdProvider::new(FlagdOptions {
 //!         host: "localhost".to_string(),
 //!         port: 8016,
@@ -37,15 +52,16 @@
 //!         ..Default::default()
 //!     }).await.unwrap();
 //!
-//!     // Evaluate a boolean flag
-//!     let context = EvaluationContext::default()
-//!         .with_targeting_key("user-123");
+//!     let context = EvaluationContext::default().with_targeting_key("user-123");
 //!     let result = provider.resolve_bool_value("bool-flag", &context).await.unwrap();
 //!     println!("Flag value: {}", result.value);
 //! }
 //! ```
 //!
-//! ### RPC Resolver with gRPC
+//! ## Evaluation Modes
+//! ### Remote Resolver (RPC)
+//! In RPC mode, the provider communicates with flagd via gRPC. It supports features like streaming updates, retry mechanisms, and name resolution (including Envoy).
+//!
 //! ```rust,no_run
 //! use open_feature_flagd::{FlagdOptions, FlagdProvider, ResolverType};
 //! use open_feature::provider::FeatureProvider;
@@ -53,30 +69,46 @@
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     // Connect using gRPC with retry and streaming options
 //!     let provider = FlagdProvider::new(FlagdOptions {
 //!         host: "localhost".to_string(),
 //!         port: 8013,
 //!         resolver_type: ResolverType::Rpc,
-//!         retry_backoff_ms: 1000,
-//!         retry_grace_period: 3,
-//!         stream_deadline_ms: 60000,
 //!         ..Default::default()
 //!     }).await.unwrap();
 //!
-//!     // Create context with targeting key and custom fields
-//!     let context = EvaluationContext::default()
-//!         .with_targeting_key("user-123")
-//!         .with_custom_field("version", "1.0.0");
-//!     
-//!     // Evaluate different flag types
+//!     let context = EvaluationContext::default().with_targeting_key("user-123");
 //!     let bool_result = provider.resolve_bool_value("feature-enabled", &context).await.unwrap();
-//!     let string_result = provider.resolve_string_value("feature-variant", &context).await.unwrap();
-//!     let int_result = provider.resolve_int_value("rollout-percentage", &context).await.unwrap();
+//!     println!("Feature enabled: {}", bool_result.value);
 //! }
 //! ```
 //!
-//! ### In-Process Resolver with gRPC Source
+//! ### REST Resolver
+//! In REST mode the provider uses the OpenFeature Remote Evaluation Protocol (OFREP) over HTTP.
+//! It is useful when gRPC is not an option.
+//! ```rust,no_run
+//! use open_feature_flagd::{FlagdOptions, FlagdProvider, ResolverType};
+//! use open_feature::provider::FeatureProvider;
+//! use open_feature::EvaluationContext;
+//!
+//! #[tokio::main]
+//! async fn main() {
+//!     let provider = FlagdProvider::new(FlagdOptions {
+//!         host: "localhost".to_string(),
+//!         port: 8016,
+//!         resolver_type: ResolverType::Rest,
+//!         ..Default::default()
+//!     }).await.unwrap();
+//!
+//!     let context = EvaluationContext::default().with_targeting_key("user-456");
+//!     let result = provider.resolve_string_value("feature-variant", &context).await.unwrap();
+//!     println!("Variant: {}", result.value);
+//! }
+//! ```
+//!
+//! ### In-Process Resolver
+//! In-process evaluation is performed locally. Flag configurations are sourced via gRPC sync stream.
+//! This mode supports advanced targeting operators (fractional, semver, string comparisons)
+//! using the built-in evaluation engine.
 //! ```rust,no_run
 //! use open_feature_flagd::{CacheSettings, FlagdOptions, FlagdProvider, ResolverType};
 //! use open_feature::provider::FeatureProvider;
@@ -84,53 +116,107 @@
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     // Initialize in-process evaluation with gRPC source
 //!     let provider = FlagdProvider::new(FlagdOptions {
 //!         host: "localhost".to_string(),
 //!         port: 8015,
 //!         resolver_type: ResolverType::InProcess,
-//!         selector: Some("my-flags".to_string()),
+//!         selector: Some("my-service".to_string()),
 //!         cache_settings: Some(CacheSettings::default()),
 //!         ..Default::default()
 //!     }).await.unwrap();
 //!
-//!     // Create evaluation context with targeting rules
 //!     let context = EvaluationContext::default()
 //!         .with_targeting_key("user-abc")
 //!         .with_custom_field("environment", "production")
 //!         .with_custom_field("semver", "2.1.0");
-//!     
-//!     // Evaluate flags with complex targeting
-//!     let feature_enabled = provider.resolve_bool_value("dark-mode", &context).await.unwrap();
-//!     let variant = provider.resolve_string_value("ui-version", &context).await.unwrap();
-//!     let config = provider.resolve_struct_value("feature-config", &context).await.unwrap();
+//!
+//!     let dark_mode = provider.resolve_bool_value("dark-mode", &context).await.unwrap();
+//!     println!("Dark mode enabled: {}", dark_mode.value);
 //! }
 //! ```
 //!
-//! ## Configuration
+//! ### Offline Mode
+//! Offline mode is an in-process variant where flag configurations are read from a file.
+//! This is useful for development or environments without network access.
+//! ```rust,no_run
+//! use open_feature_flagd::{FlagdOptions, FlagdProvider, ResolverType};
+//! use open_feature::provider::FeatureProvider;
+//! use open_feature::EvaluationContext;
 //!
-//! The provider can be configured through environment variables:
+//! #[tokio::main]
+//! async fn main() {
+//!     let offline_path = "./path/to/flagd-config.json".to_string();
+//!     let provider = FlagdProvider::new(FlagdOptions {
+//!         host: "localhost".to_string(),
+//!         resolver_type: ResolverType::Offline,
+//!         source_configuration: Some(offline_path),
+//!         ..Default::default()
+//!     }).await.unwrap();
 //!
-//! * `FLAGD_HOST`: Host address (default: "localhost")
-//! * `FLAGD_PORT`: Port number (default: 8013 for gRPC, 8016 for REST)
-//! * `FLAGD_CACHE`: Cache type ("lru", "mem", "disabled")
-//! * `FLAGD_MAX_CACHE_SIZE`: Maximum cache entries
-//! * `FLAGD_CACHE_TTL`: Cache TTL in seconds
+//!     let context = EvaluationContext::default();
+//!     let result = provider.resolve_int_value("rollout-percentage", &context).await.unwrap();
+//!     println!("Rollout percentage: {}", result.value);
+//! }
+//! ```
 //!
-//! ## Value Types
+//! ## Configuration Options
+//! Configurations can be provided as constructor options or via environment variables (with constructor options taking priority). The following options are supported:
 //!
-//! Supports multiple value types:
-//! * Boolean flags
-//! * String flags
-//! * Integer flags
-//! * Float flags
-//! * Structured flags (JSON objects)
+//! | Option                                  | Env Variable                            | Type / Supported Value            | Default                             | Compatible Resolver            |
+//! |-----------------------------------------|-----------------------------------------|-----------------------------------|-------------------------------------|--------------------------------|
+//! | Host                                    | FLAGD_HOST                              | string                            | "localhost"                         | RPC, REST, In-Process, Offline |
+//! | Port                                    | FLAGD_PORT                              | number                            | 8013 (RPC), 8016 (REST)             | RPC, REST, In-Process, Offline |
+//! | Target URI                              | FLAGD_TARGET_URI                        | string                            | ""                                  | RPC, In-Process                |
+//! | TLS                                     | FLAGD_TLS                               | boolean                           | false                               | RPC, In-Process                |
+//! | Socket Path                             | FLAGD_SOCKET_PATH                       | string                            | ""                                  | RPC                            |
+//! | Certificate Path                        | FLAGD_SERVER_CERT_PATH                  | string                            | ""                                  | RPC, In-Process                |
+//! | Cache Type (LRU / In-Memory / Disabled) | FLAGD_CACHE                             | string ("lru", "mem", "disabled") | lru                                 | RPC, In-Process, Offline       |
+//! | Cache TTL (Seconds)                     | FLAGD_CACHE_TTL                         | number                            | 60                                  | RPC, In-Process, Offline       |
+//! | Max Cache Size                          | FLAGD_MAX_CACHE_SIZE                    | number                            | 1000                                | RPC, In-Process, Offline       |
+//! | Offline File Path                       | FLAGD_OFFLINE_FLAG_SOURCE_PATH          | string                            | ""                                  | Offline                        |
+//! | Retry Backoff (ms)                      | FLAGD_RETRY_BACKOFF_MS                  | number                            | 1000                                | RPC, In-Process                |
+//! | Retry Backoff Maximum (ms)              | FLAGD_RETRY_BACKOFF_MAX_MS              | number                            | 120000                              | RPC, In-Process                |
+//! | Retry Grace Period                      | FLAGD_RETRY_GRACE_PERIOD                | number                            | 5                                   | RPC, In-Process                |
+//! | Event Stream Deadline (ms)              | FLAGD_STREAM_DEADLINE_MS                | number                            | 600000                              | RPC                            |
+//! | Offline Poll Interval (ms)              | FLAGD_OFFLINE_POLL_MS                   | number                            | 5000                                | Offline                        |
+//! | Source Selector                         | FLAGD_SOURCE_SELECTOR                   | string                            | ""                                  | In-Process                     |
+//!
+//! ## Development
+//! After cloning the repository, you first need to update git submodules:
+//! ```bash
+//! pushd rust-sdk-contrib/crates/flagd
+//! # Update and pull git submodules
+//! git submodule update --init
+//! ```
+//! Afterwards, you need to install `protoc`:
+//! - For MacOS: `brew install protobuf`
+//! - For Fedora: `dnf install protobuf protobuf-devel`
+//!
+//! Once steps mentioned above are done, `cargo build` will build the crate.
+//!
+//! ### Testing
+//! To run tests across a flagd server, `testcontainers-rs` crate has been used to spin up containers. `Docker` is needed to be installed to run E2E tests.
+//! > At the time of writing, `podman` was tested and did not work.
+//!
+//! If it is not possible to access docker, unit tests can be run with:
+//! ```bash
+//! cargo test --lib
+//! ```
+//!
+//! open-feature-flagd uses `test-log` to have tracing logs printable. To have full visibility on test logs, you can use:
+//!
+//! ```bash
+//! RUST_LOG_SPAN_EVENTS=full RUST_LOG=debug cargo test -- --nocapture
+//! ```
+//! ## License
+//! Apache 2.0 - See [LICENSE](./../../LICENSE) for more information.
+//! 
 
 pub mod cache;
-pub mod resolver;
 pub mod error;
-use crate::resolver::in_process::resolver::{FileResolver, InProcessResolver};
+pub mod resolver;
 use crate::error::FlagdError;
+use crate::resolver::in_process::resolver::{FileResolver, InProcessResolver};
 use async_trait::async_trait;
 use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
 use open_feature::{

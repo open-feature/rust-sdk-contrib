@@ -3,6 +3,7 @@ use open_feature_flagd::{
     CacheSettings, CacheType, FlagdOptions, FlagdProvider, ResolverType,
 };
 use std::collections::HashMap;
+use test_log::test;
 
 #[derive(Debug, World)]
 #[world(init = Self::new)]
@@ -262,7 +263,7 @@ async fn check_option_value(
     assert_eq!(actual, expected, "Option '{}' value mismatch", option);
 }
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn config_test() {
     // tracing_subscriber::fmt::init();
 

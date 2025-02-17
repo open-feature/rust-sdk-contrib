@@ -51,7 +51,6 @@ use open_feature::{
 use serde_json;
 use tracing::{debug, error, instrument};
 
-use crate::resolver::common::upstream::UpstreamConfig;
 use crate::FlagdOptions;
 
 /// REST-based resolver implementing the OpenFeature Remote Evaluation Protocol
@@ -75,15 +74,10 @@ impl RestResolver {
     /// A new instance of RestResolver configured to connect to the specified endpoint
     pub fn new(options: &FlagdOptions) -> Self {
         let endpoint = if let Some(uri) = &options.target_uri {
-            let config = UpstreamConfig::new(uri.clone(), false)
-                .expect("Failed to create upstream config");
-            format!("{}/{}/ofrep/v1/evaluate/flags", 
-                config.endpoint().uri().to_string().trim_end_matches('/'),
-                config.authority().path().trim_matches('/'))
+            format!("http://{}", uri)
         } else {
             format!("http://{}:{}", options.host, options.port)
         };
-    
         Self {
             endpoint,
             metadata: ProviderMetadata::new("flagd-rest-provider"),
@@ -524,6 +518,7 @@ impl IntoFeatureValue for serde_json::Value {
 mod tests {
     use super::*;
     use serde_json::json;
+    use test_log::test;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -539,7 +534,7 @@ mod tests {
         (mock_server, resolver)
     }
 
-    #[tokio::test]
+    #[test(tokio::test)]
     async fn test_resolve_bool_value() {
         let (mock_server, resolver) = setup_mock_server().await;
 
@@ -564,7 +559,7 @@ mod tests {
         assert_eq!(result.reason, Some(open_feature::EvaluationReason::Static));
     }
 
-    #[tokio::test]
+    #[test(tokio::test)]
     async fn test_resolve_string_value() {
         let (mock_server, resolver) = setup_mock_server().await;
 
@@ -589,7 +584,7 @@ mod tests {
         assert_eq!(result.reason, Some(open_feature::EvaluationReason::Static));
     }
 
-    #[tokio::test]
+    #[test(tokio::test)]
     async fn test_resolve_float_value() {
         let (mock_server, resolver) = setup_mock_server().await;
 
@@ -614,7 +609,7 @@ mod tests {
         assert_eq!(result.reason, Some(open_feature::EvaluationReason::Static));
     }
 
-    #[tokio::test]
+    #[test(tokio::test)]
     async fn test_resolve_int_value() {
         let (mock_server, resolver) = setup_mock_server().await;
 
@@ -639,7 +634,7 @@ mod tests {
         assert_eq!(result.reason, Some(open_feature::EvaluationReason::Static));
     }
 
-    #[tokio::test]
+    #[test(tokio::test)]
     async fn test_resolve_struct_value() {
         let (mock_server, resolver) = setup_mock_server().await;
 
@@ -684,7 +679,7 @@ mod tests {
         assert_eq!(result.reason, Some(open_feature::EvaluationReason::Static));
     }
 
-    #[tokio::test]
+    #[test(tokio::test)]
     async fn test_error_handling() {
         let (mock_server, resolver) = setup_mock_server().await;
 

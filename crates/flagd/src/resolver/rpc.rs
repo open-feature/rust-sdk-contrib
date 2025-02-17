@@ -50,7 +50,6 @@ use crate::flagd::evaluation::v1::{
     ResolveFloatRequest, ResolveFloatResponse, ResolveIntRequest, ResolveIntResponse,
     ResolveObjectRequest, ResolveObjectResponse, ResolveStringRequest, ResolveStringResponse,
 };
-use crate::resolver::common::name_resolvers::EnvoyNameResolver;
 use crate::{convert_context, convert_proto_struct_to_struct_value, FlagdOptions};
 use async_trait::async_trait;
 use hyper_util::rt::TokioIo;
@@ -67,6 +66,8 @@ use tokio::time::sleep;
 use tonic::transport::{Channel, Endpoint, Uri};
 use tower::service_fn;
 use tracing::{debug, error, info, instrument, warn};
+
+use super::common::upstream::UpstreamConfig;
 
 type ClientType = ServiceClient<Channel>;
 
@@ -128,7 +129,9 @@ impl RpcResolver {
         }
     }
 
-    async fn establish_connection(options: &FlagdOptions) -> Result<ClientType, Box<dyn std::error::Error>> {
+    async fn establish_connection(
+        options: &FlagdOptions,
+    ) -> Result<ClientType, Box<dyn std::error::Error>> {
         if let Some(socket_path) = &options.socket_path {
             debug!("Attempting Unix socket connection to: {}", socket_path);
             let socket_path = socket_path.clone();
@@ -141,28 +144,38 @@ impl RpcResolver {
                     }
                 }))
                 .await?;
-    
+
             return Ok(ServiceClient::new(channel));
         }
-    
+
         let target = options
             .target_uri
             .clone()
             .unwrap_or_else(|| format!("{}:{}", options.host, options.port));
-    
-        let (mut endpoint, uri) = EnvoyNameResolver::new(target.replace("http://", ""), false)?;
-    
-        if options.stream_deadline_ms > 0 {
-            endpoint = endpoint.http2_keep_alive_interval(Duration::from_millis(options.stream_deadline_ms as u64));
+        let upstream_config = UpstreamConfig::new(target.replace("http://", ""), false)?;
+        let mut endpoint = upstream_config.endpoint().clone();
+
+        // Extend support for envoy names resolution
+        if let Some(uri) = &options.target_uri {
+            if uri.starts_with("envoy://") {
+                // Expected format: envoy://<host:port>/<desired_authority>
+                let without_prefix = uri.trim_start_matches("envoy://");
+                let segments: Vec<&str> = without_prefix.split('/').collect();
+                if segments.len() >= 2 {
+                    let authority_str = segments[1];
+                    // Create a full URI from the authority for endpoint.origin()
+                    let authority_uri =
+                        std::str::FromStr::from_str(&format!("http://{}", authority_str))?;
+                    endpoint = endpoint.origin(authority_uri);
+                }
+            }
         }
-    
-        endpoint = endpoint.origin(uri);
-    
+
         let channel = endpoint
             .timeout(Duration::from_millis(options.deadline_ms as u64))
             .connect()
             .await?;
-    
+
         Ok(ServiceClient::new(channel))
     }
 }
@@ -347,8 +360,10 @@ mod tests {
         EventStreamResponse, ResolveAllRequest, ResolveAllResponse,
     };
     use futures_core::Stream;
+    use serial_test::serial;
     use std::{collections::BTreeMap, pin::Pin};
     use tempfile::TempDir;
+    use test_log::test;
     use tokio::net::UnixListener;
     use tokio::sync::oneshot;
     use tokio::{net::TcpListener, time::Instant};
@@ -501,7 +516,7 @@ mod tests {
         }
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[test(tokio::test(flavor = "multi_thread", worker_threads = 1))]
     async fn test_dns_resolution() {
         let server = TestServer::new().await;
         // Add delay to ensure server is ready
@@ -523,7 +538,7 @@ mod tests {
         assert_eq!(result.value, true);
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[test(tokio::test(flavor = "multi_thread", worker_threads = 1))]
     async fn test_envoy_resolution() {
         let server = TestServer::new().await;
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -546,7 +561,7 @@ mod tests {
         assert_eq!(result.value, true);
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[test(tokio::test(flavor = "multi_thread", worker_threads = 1))]
     async fn test_value_resolution() {
         let server = TestServer::new().await;
         let options = FlagdOptions {
@@ -600,7 +615,7 @@ mod tests {
         assert!(!struct_result.value.fields.is_empty());
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[test(tokio::test(flavor = "multi_thread", worker_threads = 1))]
     async fn test_metadata() {
         let metadata = create_test_metadata();
         let flag_metadata = convert_proto_metadata(metadata);
@@ -619,7 +634,7 @@ mod tests {
         ));
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[test(tokio::test(flavor = "multi_thread", worker_threads = 1))]
     async fn test_standard_connection() {
         let server = TestServer::new().await;
         let parts: Vec<&str> = server.target.split(':').collect();
@@ -641,7 +656,7 @@ mod tests {
         assert_eq!(result.value, true);
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[test(tokio::test(flavor = "multi_thread", worker_threads = 1))]
     async fn test_envoy_connection() {
         let server = TestServer::new().await;
         let parts: Vec<&str> = server.target.split(':').collect();
@@ -663,7 +678,8 @@ mod tests {
         assert_eq!(result.value, true);
     }
 
-    #[tokio::test]
+    #[test(tokio::test(flavor = "multi_thread", worker_threads = 1))]
+    #[serial]
     async fn test_retry_mechanism() {
         let options = FlagdOptions {
             host: "invalid-host".to_string(),
@@ -685,7 +701,7 @@ mod tests {
         assert!(duration.as_millis() < 600);
     }
 
-    #[tokio::test]
+    #[test(tokio::test)]
     async fn test_successful_retry() {
         let server = TestServer::new().await;
         let options = FlagdOptions {
@@ -707,7 +723,7 @@ mod tests {
         assert_eq!(result.value, true);
     }
 
-    #[tokio::test]
+    #[test(tokio::test)]
     async fn test_rpc_unix_socket_connection() {
         let tmp_dir = TempDir::new().unwrap();
         let socket_path = tmp_dir.path().join("test.sock");

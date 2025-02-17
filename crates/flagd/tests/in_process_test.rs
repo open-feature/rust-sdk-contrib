@@ -4,11 +4,12 @@ use common::{Flagd, FLAGD_CONFIG, FLAGD_SYNC_PORT};
 use open_feature_flagd::{FlagdOptions, FlagdProvider, ResolverType};
 use open_feature::provider::FeatureProvider;
 use open_feature::{EvaluationContext, Value};
+use test_log::test;
 use testcontainers::runners::AsyncRunner;
 
 mod common;
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_in_process_bool_resolution() {
     let flagd = Flagd::new()
         .with_config(FLAGD_CONFIG)
@@ -35,7 +36,7 @@ async fn test_in_process_bool_resolution() {
     assert_eq!(bool_result.value, true);
 }
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_in_process_sync_bool_resolution() {
     let initial_config = r#"{
         "flags": {
@@ -100,7 +101,7 @@ async fn test_in_process_sync_bool_resolution() {
     assert_eq!(updated_result.value, false);
 }
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_in_process_resolver_all_types() {
     let flagd = Flagd::new()
         .with_config(FLAGD_CONFIG)
@@ -154,7 +155,7 @@ async fn test_in_process_resolver_all_types() {
 }
 
 // TODO: MAKE THIS WORK
-// #[tokio::test]
+// #[test(tokio::test)]
 // async fn test_in_process_selector() {
 //     tracing_subscriber::fmt::init();
 //     // Start source flagd container

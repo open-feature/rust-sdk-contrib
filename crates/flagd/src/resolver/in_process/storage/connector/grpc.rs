@@ -3,18 +3,16 @@ use crate::flagd::sync::v1::{flag_sync_service_client::FlagSyncServiceClient, Sy
 use crate::resolver::common::upstream::UpstreamConfig;
 use crate::FlagdOptions;
 use anyhow::{Context, Result};
-use tonic::metadata::MetadataValue;
-use tonic::Request;
+use std::str::FromStr;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
-use std::str::FromStr;
 use std::time::Duration;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
-use tonic::transport::Channel;
+use tonic::transport::{Channel, Uri};
 use tracing::{debug, error, warn};
 
 const CONNECTION_TIMEOUT_SECS: u64 = 5;
@@ -30,10 +28,17 @@ pub struct GrpcStreamConnector {
     retry_backoff_max_ms: u32,
     retry_grace_period: u32,
     stream_deadline_ms: u32,
+    authority: String, // desired authority, e.g. "b-features-api.service"
 }
 
 impl GrpcStreamConnector {
-    pub fn new(target: String, selector: Option<String>, options: &FlagdOptions) -> Self {
+    // Updated new() accepts the extra authority parameter.
+    pub fn new(
+        target: String,
+        selector: Option<String>,
+        options: &FlagdOptions,
+        authority: String,
+    ) -> Self {
         debug!("Creating new GrpcStreamConnector with target: {}", target);
         let (sender, receiver) = channel(1000);
         Self {
@@ -46,19 +51,39 @@ impl GrpcStreamConnector {
             retry_backoff_max_ms: options.retry_backoff_max_ms,
             retry_grace_period: options.retry_grace_period,
             stream_deadline_ms: options.stream_deadline_ms,
+            authority,
         }
     }
 
-    async fn connect_with_timeout(&self) -> Result<Channel> {
+    async fn establish_connection_using(&self, config: &UpstreamConfig) -> Result<Channel> {
+        debug!("Created endpoint: {:?}", config.endpoint().uri());
+        let mut endpoint = config.endpoint().clone();
+        if self.stream_deadline_ms > 0 {
+            endpoint = endpoint
+                .http2_keep_alive_interval(Duration::from_millis(self.stream_deadline_ms as u64));
+        }
+        // Use 'origin' to inject the desired authority. Since origin() expects a full URI,
+        // we prepend "http://" to the authority string.
+        let authority_uri = Uri::from_str(&format!("http://{}", self.authority))
+            .context("Invalid authority URI")?;
+        endpoint = endpoint.origin(authority_uri);
+
+        endpoint
+            .timeout(Duration::from_secs(CONNECTION_TIMEOUT_SECS))
+            .connect()
+            .await
+            .context(format!("Failed to connect to gRPC server: {}", self.target))
+    }
+
+    async fn connect_with_timeout_using(&self, config: &UpstreamConfig) -> Result<Channel> {
         debug!(
             "Attempting connection with timeout to target: {}",
             self.target
         );
         let mut current_delay = self.retry_backoff_ms;
         let mut attempts = 0;
-    
         while !self.shutdown.load(Ordering::Relaxed) {
-            match self.establish_connection().await {
+            match self.establish_connection_using(config).await {
                 Ok(channel) => {
                     debug!("Successfully established channel connection");
                     return Ok(channel);
@@ -69,7 +94,6 @@ impl GrpcStreamConnector {
                         error!("Connection attempts exhausted: {}", e);
                         return Err(e.context("Max retries exceeded"));
                     }
-    
                     let delay = Duration::from_millis(current_delay as u64);
                     warn!(
                         "Connection attempt {} failed, retrying in {}ms: {}",
@@ -77,54 +101,27 @@ impl GrpcStreamConnector {
                         delay.as_millis(),
                         e
                     );
-    
                     sleep(delay).await;
                     current_delay = (current_delay * 2).min(self.retry_backoff_max_ms);
                 }
             }
         }
-    
         Err(anyhow::anyhow!(
             "Shutdown requested during connection attempts"
         ))
     }
 
-    async fn establish_connection(&self) -> Result<Channel> {
-        let config = UpstreamConfig::new(self.target.clone(), true)?;
-        debug!("Created endpoint: {:?}", config.endpoint().uri());
-        
-        let mut endpoint = config.endpoint().clone();
-        if self.stream_deadline_ms > 0 {
-            endpoint = endpoint
-                .http2_keep_alive_interval(Duration::from_millis(self.stream_deadline_ms as u64));
-        }
-        
-        endpoint
-            .timeout(Duration::from_secs(CONNECTION_TIMEOUT_SECS))
-            .connect()
-            .await
-            .context(format!("Failed to connect to gRPC server: {}", self.target))
-    }
-
     async fn start_stream(&self) -> Result<()> {
         debug!("Starting sync stream connection to {}", self.target);
-        let channel = self.connect_with_timeout().await?;
-        
         let config = UpstreamConfig::new(self.target.clone(), true)?;
-        
-        let mut client = FlagSyncServiceClient::with_interceptor(channel, move |mut req: Request<()>| {
-            req.metadata_mut().insert(
-                "authority",
-                MetadataValue::from_str(config.authority().path().trim_matches('/')).unwrap(),
-            );
-            Ok(req)
-        });
-    
+        let channel = self.connect_with_timeout_using(&config).await?;
+        debug!("Using authority: {}", self.authority);
+        // Create the gRPC client with no interceptor because the endpoint already carries the desired authority.
+        let mut client = FlagSyncServiceClient::new(channel);
         let request = tonic::Request::new(SyncFlagsRequest {
             provider_id: "rust-flagd-provider".to_string(),
             selector: self.selector.clone().unwrap_or_default(),
         });
-        
         debug!("Sending sync request with selector: {:?}", self.selector);
         match client.sync_flags(request).await {
             Ok(response) => {
@@ -133,12 +130,10 @@ impl GrpcStreamConnector {
                     if self.shutdown.load(Ordering::Relaxed) {
                         break;
                     }
-        
                     debug!(
                         "Received flag configuration update: {} bytes",
                         msg.flag_configuration.len()
                     );
-        
                     self.sender
                         .send(QueuePayload {
                             payload_type: QueuePayloadType::Data,
@@ -155,6 +150,34 @@ impl GrpcStreamConnector {
             }
         }
     }
+
+    // New helper that continuously attempts to keep the stream alive
+    async fn run_sync_stream(&self) {
+        let mut current_delay = self.retry_backoff_ms;
+        loop {
+            if self.shutdown.load(Ordering::Relaxed) {
+                debug!("Shutdown requested; stopping sync stream loop");
+                break;
+            }
+
+            match self.start_stream().await {
+                Ok(_) => {
+                    // If start_stream finishes gracefully (i.e. connection closed without error),
+                    // you might want to decide whether to try reconnecting or exit.
+                    debug!("Sync stream ended; reconnecting");
+                }
+                Err(e) => {
+                    error!(
+                        "Sync stream encountered error: {}. Retrying in {}ms",
+                        e, current_delay
+                    );
+                }
+            }
+            sleep(Duration::from_millis(current_delay as u64)).await;
+            // Exponential backoff: double delay until max backoff is reached.
+            current_delay = (current_delay * 2).min(self.retry_backoff_max_ms);
+        }
+    }
 }
 
 #[async_trait::async_trait]
@@ -162,11 +185,10 @@ impl Connector for GrpcStreamConnector {
     async fn init(&self) -> Result<()> {
         debug!("Initializing GrpcStreamConnector");
         let connector = self.clone();
+        // Instead of spawning start_stream directly, we spawn using our new run_sync_stream loop.
         tokio::spawn(async move {
             debug!("Starting sync stream on {}", connector.target);
-            if let Err(e) = connector.start_stream().await {
-                error!("Error in sync stream: {}", e);
-            }
+            connector.run_sync_stream().await;
         });
         debug!("Initialized sync stream connector");
         Ok(())
@@ -183,57 +205,68 @@ impl Connector for GrpcStreamConnector {
     }
 }
 
+// (existing file content above remains unchanged)
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Instant;
-    use tokio::time::{sleep, timeout};
+    use crate::resolver::common::upstream::UpstreamConfig;
+    use crate::FlagdOptions;
+    use serial_test::serial;
+    use test_log::test;
+    use tokio::time::Instant;
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_retry_backoff() {
+    #[test(tokio::test(flavor = "multi_thread", worker_threads = 1))]
+    #[serial]
+    async fn test_retry_mechanism_inprocess() {
+        // Create options configured for a failing connection.
         let options = FlagdOptions {
+            host: "invalid-host".to_string(),
+            resolver_type: crate::ResolverType::InProcess,
+            port: 4444,
+            target_uri: None,
+            deadline_ms: 500,
             retry_backoff_ms: 100,
             retry_backoff_max_ms: 400,
             retry_grace_period: 3,
-            ..Default::default()
+            stream_deadline_ms: 500,
+            tls: false,
+            cert_path: None,
+            selector: None,
+            socket_path: None,
+            cache_settings: None,
+            source_configuration: None,
+            offline_poll_interval_ms: None,
         };
 
-        let _connector = GrpcStreamConnector::new("test://localhost".to_string(), None, &options);
+        let connector = GrpcStreamConnector::new(
+            "invalid-host".to_string(),
+            None,
+            &options,
+            "invalid-authority".to_string(),
+        );
+
+        // Create an upstream configuration with the invalid target.
+        let config = UpstreamConfig::new(connector.target.clone(), true)
+            .expect("failed to create upstream config");
 
         let start = Instant::now();
-        let _ = timeout(Duration::from_millis(500), async {
-            while start.elapsed().as_millis() < 400 {
-                sleep(Duration::from_millis(50)).await;
-            }
-        })
-        .await;
+        let result = connector.connect_with_timeout_using(&config).await;
+        let elapsed = start.elapsed();
 
-        let duration = start.elapsed();
-        assert!(duration.as_millis() >= 400);
-        assert!(duration.as_millis() < 600);
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_max_backoff_limit() {
-        let options = FlagdOptions {
-            retry_backoff_ms: 100,
-            retry_backoff_max_ms: 150,
-            retry_grace_period: 3,
-            ..Default::default()
-        };
-
-        let _connector = GrpcStreamConnector::new("test://localhost".to_string(), None, &options);
-
-        let start = Instant::now();
-        let _ = timeout(Duration::from_millis(300), async {
-            while start.elapsed().as_millis() < 200 {
-                sleep(Duration::from_millis(50)).await;
-            }
-        })
-        .await;
-
-        let duration = start.elapsed();
-        assert!(duration.as_millis() >= 200);
-        assert!(duration.as_millis() < 400);
+        // Ensure that after the configured retry attempts the connector gives up.
+        assert!(result.is_err(), "Expected error on connection attempts");
+        // With 3 attempts (retry backoff delays of 100ms and 200ms before the third attempt fails)
+        // the total delay should be at least 300ms and less than 600ms (allowing for overhead)
+        assert!(
+            elapsed.as_millis() >= 300,
+            "Elapsed time {}ms is less than expected",
+            elapsed.as_millis()
+        );
+        assert!(
+            elapsed.as_millis() < 600,
+            "Elapsed time {}ms is too high",
+            elapsed.as_millis()
+        );
     }
 }

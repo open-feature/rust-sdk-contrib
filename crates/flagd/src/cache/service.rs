@@ -41,6 +41,17 @@ pub enum CacheType {
     Disabled,
 }
 
+impl<'a> From<&'a str> for CacheType {
+    fn from(s: &'a str) -> Self {
+        match s.to_lowercase().as_str() {
+            "lru" => CacheType::Lru,
+            "mem" => CacheType::InMemory,
+            "disabled" => CacheType::Disabled,
+            _ => CacheType::Lru,
+        }
+    }
+}
+
 impl std::fmt::Display for CacheType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -55,22 +66,20 @@ impl std::fmt::Display for CacheType {
 #[derive(Debug, Clone)]
 pub struct CacheSettings {
     /// Type of cache to use (LRU, InMemory, or Disabled)
+    /// Default: LRU
     pub cache_type: CacheType,
     /// Maximum number of entries the cache can hold
+    /// Default: 1000
     pub max_size: usize,
     /// Optional time-to-live for cache entries
+    /// Default: 60 seconds
     pub ttl: Option<Duration>,
 }
 
 impl Default for CacheSettings {
     fn default() -> Self {
         let cache_type = std::env::var("FLAGD_CACHE")
-            .map(|c| match c.as_str() {
-                "lru" => CacheType::Lru,
-                "mem" => CacheType::InMemory,
-                "disabled" => CacheType::Disabled,
-                _ => CacheType::Lru,
-            })
+            .map(|s| CacheType::from(s.as_str()))
             .unwrap_or(CacheType::Lru);
 
         let max_size = std::env::var("FLAGD_MAX_CACHE_SIZE")
@@ -78,10 +87,14 @@ impl Default for CacheSettings {
             .and_then(|s| s.parse().ok())
             .unwrap_or(1000);
 
+        // Java or Golang implementation does not use a default TTL, however
+        // if there is no TTL cache is never expired, resulting in flag resolution
+        // not updated. 60 second as a default is taken from gofeatureflag implementation.
         let ttl = std::env::var("FLAGD_CACHE_TTL")
             .ok()
             .and_then(|s| s.parse().ok())
-            .map(Duration::from_secs);
+            .map(Duration::from_secs)
+            .or_else(|| Some(Duration::from_secs(60)));
 
         Self {
             cache_type,
@@ -239,8 +252,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use test_log::test;
 
-    #[tokio::test]
+    #[test(tokio::test)]
     async fn test_cache_service_lru() {
         let settings = CacheSettings {
             cache_type: CacheType::Lru,
@@ -270,7 +284,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[test(tokio::test)]
     async fn test_cache_service_ttl() {
         let settings = CacheSettings {
             cache_type: CacheType::InMemory,
@@ -293,7 +307,7 @@ mod tests {
         assert_eq!(service.get("key1", &context).await, None);
     }
 
-    #[tokio::test]
+    #[test(tokio::test)]
     async fn test_cache_service_disabled() {
         let settings = CacheSettings {
             cache_type: CacheType::Disabled,
@@ -308,7 +322,7 @@ mod tests {
         assert_eq!(service.get("key1", &context).await, None);
     }
 
-    #[tokio::test]
+    #[test(tokio::test)]
     async fn test_different_contexts_same_flag() {
         let settings = CacheSettings {
             cache_type: CacheType::InMemory,

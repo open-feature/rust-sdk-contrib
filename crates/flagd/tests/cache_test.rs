@@ -4,12 +4,13 @@ use open_feature_flagd::{
 };
 use open_feature::provider::FeatureProvider;
 use open_feature::{EvaluationContext, Value};
+use test_log::test;
 use testcontainers::runners::AsyncRunner;
 use tokio::time::Duration;
 
 mod common;
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_cache_ttl_and_config_change() {
     let flagd = Flagd::new()
         .with_config(FLAGD_CONFIG)
@@ -83,7 +84,7 @@ async fn test_cache_ttl_and_config_change() {
     assert_eq!(new_result.value, false);
 }
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_rpc_provider_with_lru_cache() {
     let flagd = Flagd::new()
         .with_config(FLAGD_CONFIG)
@@ -110,7 +111,7 @@ async fn test_rpc_provider_with_lru_cache() {
     verify_cache_behavior(&provider).await;
 }
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_rpc_provider_with_inmemory_cache() {
     let flagd = Flagd::new()
         .with_config(FLAGD_CONFIG)
@@ -136,7 +137,7 @@ async fn test_rpc_provider_with_inmemory_cache() {
     verify_cache_behavior(&provider).await;
 }
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_in_process_provider_with_lru_cache() {
     let flagd = Flagd::new()
         .with_config(FLAGD_CONFIG)
@@ -162,9 +163,9 @@ async fn test_in_process_provider_with_lru_cache() {
     verify_cache_behavior(&provider).await;
 }
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_in_process_provider_with_inmemory_cache() {
-    tracing_subscriber::fmt::init();
+    // tracing_subscriber::fmt::init();
     let flagd = Flagd::new()
         .with_config(FLAGD_CONFIG)
         .start()
@@ -189,7 +190,7 @@ async fn test_in_process_provider_with_inmemory_cache() {
     verify_cache_behavior(&provider).await;
 }
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_rest_provider_with_lru_cache() {
     let flagd = Flagd::new()
         .with_config(FLAGD_CONFIG)
@@ -215,7 +216,7 @@ async fn test_rest_provider_with_lru_cache() {
     verify_cache_behavior(&provider).await;
 }
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_rest_provider_with_inmemory_cache() {
     let flagd = Flagd::new()
         .with_config(FLAGD_CONFIG)

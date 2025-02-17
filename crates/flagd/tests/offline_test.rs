@@ -7,10 +7,11 @@ use open_feature::provider::FeatureProvider;
 use open_feature::{EvaluationContext, Value};
 use std::io::Write;
 use tempfile::NamedTempFile;
+use test_log::test;
 
 mod common;
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_in_process_file_sync() {
     // Create temporary config file
     let mut temp_file = NamedTempFile::new().unwrap();
@@ -49,7 +50,7 @@ async fn test_in_process_file_sync() {
     assert_eq!(updated_result.value, false);
 }
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_file_connector_error_handling() {
     // Test with non-existent file
     let provider = FlagdProvider::new(FlagdOptions {
@@ -75,7 +76,7 @@ async fn test_file_connector_error_handling() {
     assert!(provider.is_err());
 }
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_file_connector_file_deletion() {
     let mut temp_file = NamedTempFile::new().unwrap();
     write!(temp_file, "{}", FLAGD_CONFIG).unwrap();
@@ -111,7 +112,7 @@ async fn test_file_connector_file_deletion() {
     assert_eq!(cached_result.value, true);
 }
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_file_resolver_all_types() {
     let mut temp_file = NamedTempFile::new().unwrap();
     write!(temp_file, "{}", FLAGD_CONFIG).unwrap();

@@ -17,7 +17,9 @@ futures-core = "0.3"
 testcontainers = { version = "0.23.1", features = ["http_wait", "blocking"] }
 wiremock = "0.6.2"
 tempfile = "3.3.1"
+serial_test = "3.2"
 tracing-test = "0.2"
+test-log = { version = "0.2", features = ["trace"] }
 
 [dependencies]
 open-feature = "0.2"

@@ -4,6 +4,7 @@ use open_feature::provider::FeatureProvider;
 use open_feature::EvaluationContext;
 use std::io::Write;
 use tempfile::NamedTempFile;
+use test_log::test;
 use testcontainers::runners::AsyncRunner;
 use tracing::debug;
 
@@ -113,7 +114,7 @@ async fn verify_targeting_rules(provider: &FlagdProvider) {
     assert_eq!(result.value, false);
 }
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_targeting_rules_rpc() {
     let flagd = Flagd::new()
         .with_config(get_targeting_test_config())
@@ -134,7 +135,7 @@ async fn test_targeting_rules_rpc() {
     verify_targeting_rules(&provider).await;
 }
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_targeting_rules_rest() {
     let flagd = Flagd::new()
         .with_config(get_targeting_test_config())
@@ -156,7 +157,7 @@ async fn test_targeting_rules_rest() {
     verify_targeting_rules(&provider).await;
 }
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_targeting_rules_in_process() {
     let flagd = Flagd::new()
         .with_config(get_targeting_test_config())
@@ -179,7 +180,7 @@ async fn test_targeting_rules_in_process() {
     verify_targeting_rules(&provider).await;
 }
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_targeting_rules_in_process_no_cache() {
     let flagd = Flagd::new()
         .with_config(get_targeting_test_config())
@@ -202,7 +203,7 @@ async fn test_targeting_rules_in_process_no_cache() {
     verify_targeting_rules(&provider).await;
 }
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_targeting_rules_offline() {
     let mut temp_file = NamedTempFile::new().unwrap();
     write!(temp_file, "{}", get_targeting_test_config()).unwrap();

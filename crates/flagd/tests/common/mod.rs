@@ -56,6 +56,7 @@ pub const FLAGD_CONFIG: &str = r#"{
     }
 }"#;
 
+#[allow(dead_code)]
 pub const ENVOY_CONFIG: &str = r#"
 static_resources:
   listeners:
@@ -74,17 +75,31 @@ static_resources:
           route_config:
             name: local_route
             virtual_hosts:
-            - name: local_service
+            - name: authorized_service
+              domains: ["b-features-api.service"]
+              routes:
+              - match:
+                  prefix: "/"
+                  headers:
+                  - name: ":authority"
+                    string_match:
+                      exact: "b-features-api.service"
+                route:
+                  cluster: flagd_service
+            - name: reject_all
               domains: ["*"]
               routes:
               - match:
                   prefix: "/"
-                route:
-                  cluster: flagd_service
+                direct_response:
+                  status: 403
+                  body:
+                    inline_string: "Invalid authority header"
           http_filters:
           - name: envoy.filters.http.router
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
   clusters:
   - name: flagd_service
     connect_timeout: 1s
@@ -98,10 +113,11 @@ static_resources:
         - endpoint:
             address:
               socket_address:
-                address: flagd_host
+                address: flagd
                 port_value: 8015
 "#;
-
+#[allow(dead_code)]
+pub const ENVOY_PORT: u16 = 9211;
 pub const FLAGD_PORT: u16 = 8013;
 pub const FLAGD_SYNC_PORT: u16 = 8015;
 pub const FLAGD_OFREP_PORT: u16 = 8016;
@@ -115,8 +131,49 @@ pub struct ConfigFile {
 
 impl ConfigFile {
     pub fn new(content: String) -> Self {
-        let mut temp_file = tempfile::NamedTempFile::new().unwrap();
+        // Store the PathBuf in a named variable first
+        let temp_dir = if cfg!(target_os = "linux") {
+            "/var/tmp".into()
+        } else {
+            // Create a PathBuf and store it in a variable
+            let temp_path = std::env::temp_dir();
+            temp_path.to_str().unwrap().to_string()
+        };
+
+        let mut temp_file = tempfile::Builder::new().tempfile_in(temp_dir).unwrap();
+
         temp_file.write(content.as_bytes()).unwrap();
+
+        // Set cross-platform read permissions
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let perms = std::fs::Permissions::from_mode(0o644);
+            temp_file.as_file().set_permissions(perms).unwrap();
+        }
+
+        // Platform-specific security configuration
+        if cfg!(target_os = "linux") {
+            // SELinux context for container access
+            let status = std::process::Command::new("chcon")
+                .arg("--type=container_file_t")
+                .arg(temp_file.path())
+                .status();
+
+            // Fallback to container-specific context if needed
+            if status.is_err() {
+                let _ = std::process::Command::new("chcon")
+                    .arg("--type=svirt_sandbox_file_t")
+                    .arg(temp_file.path())
+                    .status();
+            }
+        } else if cfg!(target_os = "macos") {
+            // Ensure POSIX permissions for Docker Desktop
+            let _ = std::process::Command::new("chmod")
+                .arg("a+r")
+                .arg(temp_file.path())
+                .status();
+        }
 
         Self {
             content,
@@ -163,7 +220,8 @@ impl Flagd {
     #![allow(dead_code)]
     pub fn new() -> Self {
         let config_file = Arc::new(ConfigFile::new(FLAGD_CONFIG.to_string()));
-        let mount: Mount = Mount::bind_mount(config_file.path(), "/etc/flagd/config.json".to_string());
+        let mount: Mount =
+            Mount::bind_mount(config_file.path(), "/etc/flagd/config.json".to_string());
 
         Self {
             config_file,
@@ -265,6 +323,7 @@ impl Clone for Envoy {
 }
 
 impl Envoy {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         let config_file = Arc::new(ConfigFile::new(ENVOY_CONFIG.to_string()));
         let mount = Mount::bind_mount(config_file.path(), "/etc/envoy/envoy.yaml".to_string());
@@ -273,19 +332,15 @@ impl Envoy {
             config_file,
             exposed_ports: vec![ContainerPort::Tcp(9211)],
             mount,
-            cmd: vec![
-                "-c".to_string(),
-                "/etc/envoy/envoy.yaml".to_string(),
-            ],
+            cmd: vec!["-c".to_string(), "/etc/envoy/envoy.yaml".to_string()],
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_config(mut self, config: impl Into<String>) -> Self {
         self.config_file = Arc::new(ConfigFile::new(config.into()));
-        self.mount = Mount::bind_mount(
-            self.config_file.path(),
-            "/etc/envoy/envoy.yaml".to_string(),
-        );
+        self.mount =
+            Mount::bind_mount(self.config_file.path(), "/etc/envoy/envoy.yaml".to_string());
         self
     }
 }
@@ -307,7 +362,7 @@ impl Image for Envoy {
         vec![
             WaitFor::Log(LogWaitStrategy::new(
                 LogSource::StdErr,
-                "all dependencies initialized. starting workers"
+                "all dependencies initialized. starting workers",
             )),
             WaitFor::millis(100),
         ]

@@ -1,4 +1,4 @@
-use crate::resolver::common::name_resolvers::EnvoyNameResolver;
+use crate::resolver::common::upstream::UpstreamConfig;
 use crate::resolver::in_process::targeting::Operator;
 use crate::{CacheService, FlagdOptions};
 use anyhow::Result;
@@ -65,13 +65,14 @@ impl InProcessResolver {
             .target_uri
             .clone()
             .unwrap_or_else(|| format!("{}:{}", options.host, options.port));
-
-        let (endpoint, _) = EnvoyNameResolver::new(target, true)?;
+        let upstream_config = UpstreamConfig::new(target, true)?;
         let connector = GrpcStreamConnector::new(
-            endpoint.uri().to_string(),
+            upstream_config.endpoint().uri().to_string(),
             options.selector.clone(),
             options,
+            upstream_config.authority().to_string(),
         );
+
         let (store, _state_receiver) = FlagStore::new(Arc::new(connector));
         let store = Arc::new(store);
         store.init().await?;
