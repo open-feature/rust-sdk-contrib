@@ -100,7 +100,7 @@ async fn initialize_config(world: &mut ConfigWorld) {
             "RPC" => ResolverType::Rpc,
             "REST" => ResolverType::Rest,
             "IN-PROCESS" | "INPROCESS" => ResolverType::InProcess,
-            "FILE" | "OFFLINE" => ResolverType::Offline,
+            "FILE" | "OFFLINE" => ResolverType::File,
             _ => ResolverType::Rpc,
         };
     } else if let Ok(resolver) = std::env::var("FLAGD_RESOLVER") {
@@ -108,7 +108,7 @@ async fn initialize_config(world: &mut ConfigWorld) {
             "RPC" => ResolverType::Rpc,
             "REST" => ResolverType::Rest,
             "IN-PROCESS" | "INPROCESS" => ResolverType::InProcess,
-            "FILE" | "OFFLINE" => ResolverType::Offline,
+            "FILE" | "OFFLINE" => ResolverType::File,
             _ => ResolverType::Rpc,
         };
     }
@@ -124,7 +124,7 @@ async fn initialize_config(world: &mut ConfigWorld) {
     if let Some(source) = world.option_values.get("offlineFlagSourcePath") {
         options.source_configuration = Some(source.clone());
         if options.resolver_type != ResolverType::Rpc {
-            options.resolver_type = ResolverType::Offline;
+            options.resolver_type = ResolverType::File;
         }
     }
 
@@ -249,7 +249,7 @@ async fn check_option_value(
             ResolverType::Rpc => Some("rpc".to_string()),
             ResolverType::Rest => Some("rest".to_string()),
             ResolverType::InProcess => Some("in-process".to_string()),
-            ResolverType::Offline => Some("file".to_string()),
+            ResolverType::File => Some("file".to_string()),
         },
         "retryBackoffMs" => Some(world.options.retry_backoff_ms.to_string()),
         "retryBackoffMaxMs" => Some(world.options.retry_backoff_max_ms.to_string()),

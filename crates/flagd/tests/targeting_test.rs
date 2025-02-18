@@ -204,14 +204,14 @@ async fn test_targeting_rules_in_process_no_cache() {
 }
 
 #[test(tokio::test)]
-async fn test_targeting_rules_offline() {
+async fn test_targeting_rules_file() {
     let mut temp_file = NamedTempFile::new().unwrap();
     write!(temp_file, "{}", get_targeting_test_config()).unwrap();
     let file_path = temp_file.path().to_str().unwrap().to_string();
 
     let provider = FlagdProvider::new(FlagdOptions {
         source_configuration: Some(file_path),
-        resolver_type: ResolverType::Offline,
+        resolver_type: ResolverType::File,
         ..Default::default()
     })
     .await

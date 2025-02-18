@@ -20,7 +20,7 @@ async fn test_in_process_file_sync() {
 
     let provider = FlagdProvider::new(FlagdOptions {
         source_configuration: Some(file_path.clone()),
-        resolver_type: ResolverType::Offline,
+        resolver_type: ResolverType::File,
         cache_settings: None,
         ..Default::default()
     })
@@ -55,7 +55,7 @@ async fn test_file_connector_error_handling() {
     // Test with non-existent file
     let provider = FlagdProvider::new(FlagdOptions {
         source_configuration: Some("/nonexistent/path".to_string()),
-        resolver_type: ResolverType::Offline,
+        resolver_type: ResolverType::File,
         ..Default::default()
     })
     .await;
@@ -68,7 +68,7 @@ async fn test_file_connector_error_handling() {
 
     let provider = FlagdProvider::new(FlagdOptions {
         source_configuration: Some(temp_file.path().to_str().unwrap().to_string()),
-        resolver_type: ResolverType::Offline,
+        resolver_type: ResolverType::File,
         ..Default::default()
     })
     .await;
@@ -84,7 +84,7 @@ async fn test_file_connector_file_deletion() {
 
     let provider = FlagdProvider::new(FlagdOptions {
         source_configuration: Some(file_path.clone()),
-        resolver_type: ResolverType::Offline,
+        resolver_type: ResolverType::File,
         cache_settings: None,
         ..Default::default()
     })
@@ -120,7 +120,7 @@ async fn test_file_resolver_all_types() {
 
     let provider = FlagdProvider::new(FlagdOptions {
         source_configuration: Some(file_path),
-        resolver_type: ResolverType::Offline,
+        resolver_type: ResolverType::File,
         ..Default::default()
     })
     .await
