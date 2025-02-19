@@ -27,8 +27,8 @@ fn get_targeting_test_config() -> &'static str {
                             { "var": "$flagd.flagKey" },
                             { "var": "email" }
                         ]},
-                        ["red", 50],
-                        ["blue", 50]
+                        ["red", 30],
+                        ["blue", 70]
                     ]
                 }
             },
@@ -71,16 +71,32 @@ fn get_targeting_test_config() -> &'static str {
 }
 
 async fn verify_targeting_rules(provider: &FlagdProvider) {
-    // Test fractional distribution
-    let context = EvaluationContext::default()
-        .with_targeting_key("user-1")
-        .with_custom_field("email", "test@example.com");
+    // Detailed test for fractional distribution:
+    let iterations = 100;
+    let mut blue_count = 0;
 
-    let result = provider
-        .resolve_string_value("fractional-flag", &context)
-        .await
-        .unwrap();
-    assert!(result.value == "red-value" || result.value == "blue-value");
+    for i in 0..iterations {
+        // Use a different email each iteration to generate different bucket values
+        let email = format!("user{}@example.com", i);
+        let context = EvaluationContext::default()
+            .with_targeting_key("user-1")
+            .with_custom_field("email", email);
+        let result = provider
+            .resolve_string_value("fractional-flag", &context)
+            .await
+            .unwrap();
+
+        // Count occurrence for blue variant
+        if result.value == "blue-value" {
+            blue_count += 1;
+        }
+    }
+
+    assert!(
+        blue_count >= 65,
+        "Expected at least 65 blue outcomes, but got {}",
+        blue_count
+    );
 
     // Test semantic version targeting
     let context = EvaluationContext::default().with_custom_field("version", "2.1.0");
