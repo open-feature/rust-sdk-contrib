@@ -250,6 +250,10 @@ mod tests {
         let config = UpstreamConfig::new(connector.target.clone(), true)
             .expect("failed to create upstream config");
 
+        // Test is flaky for some reason I don't understand, sleeping before connection
+        // seems to fix it.
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
         let start = Instant::now();
         let result = connector.connect_with_timeout_using(&config).await;
         let elapsed = start.elapsed();
