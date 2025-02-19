@@ -65,7 +65,7 @@ use tokio::net::UnixStream;
 use tokio::time::sleep;
 use tonic::transport::{Channel, Endpoint, Uri};
 use tower::service_fn;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, error, instrument, warn};
 
 use super::common::upstream::UpstreamConfig;
 
@@ -91,9 +91,9 @@ pub struct RpcResolver {
 }
 
 impl RpcResolver {
-    #[instrument]
+    #[instrument(skip(options))]
     pub async fn new(options: &FlagdOptions) -> Result<Self, Box<dyn std::error::Error>> {
-        info!("initializing RPC resolver connection to {}", options.host);
+        debug!("initializing RPC resolver connection to {}", options.host);
 
         let mut retry_delay = Duration::from_millis(options.retry_backoff_ms as u64);
         let mut attempts = 0;

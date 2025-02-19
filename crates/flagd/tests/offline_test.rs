@@ -2,9 +2,9 @@ use std::fs::File;
 use std::time::Duration;
 
 use common::FLAGD_CONFIG;
-use open_feature_flagd::{FlagdOptions, FlagdProvider, ResolverType};
 use open_feature::provider::FeatureProvider;
 use open_feature::{EvaluationContext, Value};
+use open_feature_flagd::{FlagdOptions, FlagdProvider, ResolverType};
 use std::io::Write;
 use tempfile::NamedTempFile;
 use test_log::test;

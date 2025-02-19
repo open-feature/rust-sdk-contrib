@@ -1,7 +1,5 @@
 use cucumber::{given, then, when, World};
-use open_feature_flagd::{
-    CacheSettings, CacheType, FlagdOptions, FlagdProvider, ResolverType,
-};
+use open_feature_flagd::{CacheSettings, CacheType, FlagdOptions, FlagdProvider, ResolverType};
 use std::collections::HashMap;
 use test_log::test;
 

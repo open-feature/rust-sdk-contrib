@@ -24,5 +24,5 @@ cargo test --lib
 open-feature-flagd uses `test-log` to have tracing logs table. To have full visibility on test logs, you can use:
 
 ```bash
-RUST_LOG_SPAN_EVENTS=full RUST_LOG=debug cargo test -- capture
+RUST_LOG_SPAN_EVENTS=full RUST_LOG=debug cargo test -- --nocapture
 ```

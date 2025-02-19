@@ -1,9 +1,9 @@
 use std::time::Duration;
 
 use common::{Flagd, FLAGD_CONFIG, FLAGD_SYNC_PORT};
-use open_feature_flagd::{FlagdOptions, FlagdProvider, ResolverType};
 use open_feature::provider::FeatureProvider;
 use open_feature::{EvaluationContext, Value};
+use open_feature_flagd::{FlagdOptions, FlagdProvider, ResolverType};
 use test_log::test;
 use testcontainers::runners::AsyncRunner;
 

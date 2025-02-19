@@ -183,7 +183,7 @@
 //!
 //! ## License
 //! Apache 2.0 - See [LICENSE](./../../LICENSE) for more information.
-//! 
+//!
 
 pub mod cache;
 pub mod error;
@@ -196,8 +196,8 @@ use open_feature::{
     EvaluationContext, EvaluationContextFieldValue, EvaluationError, StructValue, Value,
 };
 use resolver::rest::RestResolver;
+use tracing::debug;
 use tracing::instrument;
-use tracing::{debug, info};
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -357,9 +357,9 @@ pub struct FlagdProvider {
 }
 
 impl FlagdProvider {
-    #[instrument]
+    #[instrument(skip(options))]
     pub async fn new(options: FlagdOptions) -> Result<Self, FlagdError> {
-        info!("Initializing FlagdProvider with options: {:?}", options);
+        debug!("Initializing FlagdProvider with options: {:?}", options);
 
         let provider: Arc<dyn FeatureProvider + Send + Sync> = match options.resolver_type {
             ResolverType::Rpc => {
