@@ -3,6 +3,15 @@ name = "open-feature-flagd"
 version = "0.0.2"
 edition = "2021"
 
+# This is needed to reduce package size
+include = [
+    "schemas/protobuf/flagd/evaluation/v1/evaluation.proto",
+    "schemas/protobuf/flagd/sync/v1/sync.proto",
+    "flagd-testbed/gherkin/config.feature",
+    "build.rs",
+    "src/*",
+]
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [build-dependencies]
