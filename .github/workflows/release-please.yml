@@ -1,0 +1,62 @@
+name: Run Release Please
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # for googleapis/release-please-action to create release commit
+      pull-requests: write # for googleapis/release-please-action to create release PR
+    # Release-please creates a PR that tracks all changes
+    steps:
+      - uses: googleapis/release-please-action@v3
+        id: release
+        with:
+          command: manifest
+          token: ${{secrets.RELEASE_PLEASE_ACTION_TOKEN}}
+          default-branch: main
+          signoff: "OpenFeature Bot <109696520+openfeaturebot@users.noreply.github.com>"
+      - name: Dump Release Please Output
+        env:
+          RELEASE_PLEASE_OUTPUT: ${{ toJson(steps.release.outputs) }}
+        run: |
+          echo "$RELEASE_PLEASE_OUTPUT"
+    outputs:
+      release_created: ${{ steps.release.outputs.releases_created }}
+      all: ${{ toJSON(steps.release.outputs) }}
+      paths_released: ${{ steps.release.outputs.paths_released }}
+
+  cargo-publish:
+    needs: release-please
+    runs-on: ubuntu-latest
+    if: ${{ fromJSON(needs.release-please.outputs.release_created || false) }}
+    strategy:
+      matrix:
+        path: ${{ fromJSON(needs.release-please.outputs.paths_released || '[]') }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      
+      - name: Install protobuf compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+  
+      - name: Setup cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Publish
+        run: |
+          cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        working-directory: ${{ matrix.path }}
