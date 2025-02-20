@@ -2,6 +2,13 @@
 name = "open-feature-flagd"
 version = "0.0.2"
 edition = "2021"
+rust-version = "1.71.1" # MSRV
+description = "The official flagd provider for OpenFeature."
+documentation = "https://docs.rs/open-feature-flagd"
+readme = "README.md"
+homepage = "https://openfeature.dev/"
+repository = "https://github.com/open-feature/rust-sdk-contrib"
+license = "Apache-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
