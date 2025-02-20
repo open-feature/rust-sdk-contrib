@@ -188,12 +188,24 @@ impl InProcessResolver {
                         OpenFeatureValue::Float(n.as_f64().unwrap())
                     }
                 }
-                _ => return Ok(ResolutionDetails::new(value)),
+                _ => {
+                    return Ok(ResolutionDetails {
+                        value,
+                        variant: Some(variant),
+                        reason: Some(open_feature::EvaluationReason::TargetingMatch),
+                        flag_metadata: None,
+                    })
+                }
             };
             cache.add(flag_key, context, cache_value).await;
         }
 
-        Ok(ResolutionDetails::new(value))
+        Ok(ResolutionDetails {
+            value,
+            variant: Some(variant),
+            reason: Some(open_feature::EvaluationReason::TargetingMatch),
+            flag_metadata: None,
+        })
     }
 }
 

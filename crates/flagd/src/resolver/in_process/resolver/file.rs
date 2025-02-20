@@ -121,7 +121,12 @@ impl FileResolver {
             }
         }
 
-        Ok(ResolutionDetails::new(value))
+        Ok(ResolutionDetails {
+            value,
+            variant: Some(variant),
+            reason: Some(open_feature::EvaluationReason::TargetingMatch),
+            flag_metadata: None,
+        })
     }
 }
 
