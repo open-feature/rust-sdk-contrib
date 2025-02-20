@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.4](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagd-v0.0.3...open-feature-flagd-v0.0.4) (2025-02-20)
+
+
+### 🐛 Bug Fixes
+
+* increase MSRV to correct version, delete unnecessary include ([#27](https://github.com/open-feature/rust-sdk-contrib/issues/27)) ([4217f8d](https://github.com/open-feature/rust-sdk-contrib/commit/4217f8d88a3208edc08cf04929fc362f627a97fe))
+
 ## [0.0.3](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagd-v0.0.2...open-feature-flagd-v0.0.3) (2025-02-20)
 
 
