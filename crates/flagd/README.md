@@ -32,7 +32,7 @@ and connection management. It is designed to work seamlessly with the OpenFeatur
 Add the dependency in your `Cargo.toml`:
 ```toml
 [dependencies]
-open-feature-flagd = "0.0.1"
+open-feature-flagd = "0.0.4"
 open-feature = "0.2"
 ```
 Then integrate it into your application:
