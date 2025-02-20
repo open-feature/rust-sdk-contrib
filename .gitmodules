@@ -1,0 +1,6 @@
+[submodule "crates/flagd/flagd-testbed"]
+	path = crates/flagd/flagd-testbed
+	url = https://github.com/open-feature/flagd-testbed.git
+[submodule "crates/flagd/schemas"]
+	path = crates/flagd/schemas
+	url = https://github.com/open-feature/flagd-schemas
