@@ -2,7 +2,7 @@
 name = "open-feature-flagd"
 version = "0.0.3"
 edition = "2021"
-rust-version = "1.71.1" # MSRV
+rust-version = "1.80.1" # MSRV
 description = "The official flagd provider for OpenFeature."
 documentation = "https://docs.rs/open-feature-flagd"
 readme = "README.md"
@@ -14,7 +14,6 @@ license = "Apache-2.0"
 include = [
     "schemas/protobuf/flagd/evaluation/v1/evaluation.proto",
     "schemas/protobuf/flagd/sync/v1/sync.proto",
-    "flagd-testbed/gherkin/config.feature",
     "build.rs",
     "src/*",
 ]
