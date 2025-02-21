@@ -30,10 +30,9 @@
 //!
 //! ## Installation
 //! Add the dependency in your `Cargo.toml`:
-//! ```toml
-//! [dependencies]
-//! open-feature-flagd = "0.0.1"
-//! open-feature = "0.2"
+//! ```bash
+//! cargo add open-feature-flagd
+//! cargo add open-feature
 //! ```
 //! Then integrate it into your application:
 //!
