@@ -154,18 +154,30 @@ impl ConfigFile {
 
         // Platform-specific security configuration
         if cfg!(target_os = "linux") {
-            // SELinux context for container access
-            let status = std::process::Command::new("chcon")
-                .arg("--type=container_file_t")
-                .arg(temp_file.path())
-                .status();
+            // Check if SELinux is enforcing
+            let selinux_enforcing = std::process::Command::new("getenforce")
+                .output()
+                .map(|output| {
+                    String::from_utf8_lossy(&output.stdout)
+                        .trim()
+                        .eq_ignore_ascii_case("enforcing")
+                })
+                .unwrap_or(false);
 
-            // Fallback to container-specific context if needed
-            if status.is_err() {
-                let _ = std::process::Command::new("chcon")
-                    .arg("--type=svirt_sandbox_file_t")
+            if selinux_enforcing {
+                // SELinux context for container access
+                let status = std::process::Command::new("chcon")
+                    .arg("--type=container_file_t")
                     .arg(temp_file.path())
                     .status();
+
+                // Fallback to container-specific context if needed
+                if status.is_err() {
+                    let _ = std::process::Command::new("chcon")
+                        .arg("--type=svirt_sandbox_file_t")
+                        .arg(temp_file.path())
+                        .status();
+                }
             }
         } else if cfg!(target_os = "macos") {
             // Ensure POSIX permissions for Docker Desktop
