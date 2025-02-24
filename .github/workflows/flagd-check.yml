@@ -1,0 +1,43 @@
+name: Flagd Checks
+
+on:
+  push:
+    paths:
+      - 'crates/flagd/**'
+      - '.github/workflows/flagd-check.yml'
+  pull_request:
+    paths:
+      - 'crates/flagd/**'
+      - '.github/workflows/flagd-check.yml'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update git submodules
+        run: git submodule update --init --recursive
+
+      - name: Install protobuf compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Install cargo-msrv and cargo-readme
+        working-directory: crates/flagd
+        run: |
+          cargo install cargo-msrv --locked
+          cargo install cargo-readme
+
+      - name: Verify Minimum Supported Rust Version
+        working-directory: crates/flagd
+        run: cargo msrv verify
+
+      - name: Check README is up-to-date
+        working-directory: crates/flagd
+        run: |
+          cargo readme --no-title --no-license > README.md.generated
+          diff README.md README.md.generated
+
