@@ -21,9 +21,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-
-    - name: Update git submodules
-      run: git submodule update --init --recursive
+      with:
+        submodules: recursive
 
     - name: Install protobuf compiler
       run: |
