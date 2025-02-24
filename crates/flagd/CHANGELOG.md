@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.5](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagd-v0.0.4...open-feature-flagd-v0.0.5) (2025-02-24)
+
+
+### 📚 Documentation
+
+* flagd update lib.rs and README to have version agnostic instructions ([#29](https://github.com/open-feature/rust-sdk-contrib/issues/29)) ([af1bd6e](https://github.com/open-feature/rust-sdk-contrib/commit/af1bd6eda1a0b70d85dcf64ba9d29003d4169235))
+
 ## [0.0.4](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagd-v0.0.3...open-feature-flagd-v0.0.4) (2025-02-20)
 
 
