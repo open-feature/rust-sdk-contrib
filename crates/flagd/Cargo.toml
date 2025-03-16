@@ -2,7 +2,7 @@
 name = "open-feature-flagd"
 version = "0.0.4"
 edition = "2021"
-rust-version = "1.80.1" # MSRV
+rust-version = "1.81.0" # MSRV
 description = "The official flagd provider for OpenFeature."
 documentation = "https://docs.rs/open-feature-flagd"
 readme = "README.md"
