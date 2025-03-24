@@ -2,7 +2,7 @@
 name = "open-feature-flagd"
 version = "0.0.4"
 edition = "2021"
-rust-version = "1.80.1" # MSRV
+rust-version = "1.81.0" # MSRV
 description = "The official flagd provider for OpenFeature."
 documentation = "https://docs.rs/open-feature-flagd"
 readme = "README.md"
@@ -30,8 +30,8 @@ cucumber = "0.21"
 tokio-stream = "0.1"
 futures-core = "0.3"
 testcontainers = { version = "0.23.1", features = ["http_wait", "blocking"] }
-wiremock = "0.6.2"
-tempfile = "3.3.1"
+wiremock = "0.6.3"
+tempfile = "3.19.0"
 serial_test = "3.2"
 tracing-test = "0.2"
 test-log = { version = "0.2", features = ["trace"] }
@@ -42,7 +42,7 @@ async-trait = "0.1"
 tonic = { version = "0.12", features = ["tls"] }
 prost = "0.13"
 prost-types = "0.13"
-tokio = { version = "1.0", features = ["full"] }
+tokio = { version = "1.44", features = ["full"] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 lru = "0.13"
@@ -50,11 +50,11 @@ futures = "0.3"
 reqwest = { version = "0.12", features = ["json", "stream"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
-anyhow = "1.0.95"
+anyhow = "1.0.97"
 regex = "1.11.1"
-semver = "1.0.25"
+semver = "1.0.26"
 murmurhash3 = "0.0.5"
 tower = "0.5"
 hyper-util = { version = "0.1", features = ["tokio"] }
 thiserror = "2.0"
-datalogic-rs = "2.0.16"
+datalogic-rs = "2.1.15"
