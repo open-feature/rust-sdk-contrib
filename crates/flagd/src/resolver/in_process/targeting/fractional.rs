@@ -1,16 +1,16 @@
 use anyhow::Result;
-use murmurhash3::murmurhash3_x86_32;
-use tracing::debug;
 use datalogic_rs::datalogic::CustomOperator;
 use datalogic_rs::logic::error::LogicError;
 use datalogic_rs::value::DataValue;
+use murmurhash3::murmurhash3_x86_32;
+use tracing::debug;
 
 #[derive(Debug)]
 pub struct FractionalOperator;
 
 impl CustomOperator for FractionalOperator {
     fn evaluate(&self, args: &[DataValue]) -> Result<DataValue, LogicError> {
-        if args.len() < 1 {
+        if args.is_empty() {
             debug!("No arguments provided for fractional targeting.");
             return Ok(DataValue::Null);
         }
@@ -18,7 +18,7 @@ impl CustomOperator for FractionalOperator {
         // Calculate bucket key and distribution
         let bucket_by: String;
         let distributions: &[DataValue];
-        
+
         match &args[0] {
             DataValue::String(s) => {
                 debug!("Using explicit bucketing expression: {:?}", s);
@@ -30,7 +30,10 @@ impl CustomOperator for FractionalOperator {
                 let targeting_key = ""; // In direct DataValue manipulation, we use default empty string
                 let flag_key = ""; // Ideally this would come from context data
                 bucket_by = format!("{}{}", flag_key, targeting_key);
-                debug!("No explicit bucketing expression. Computed bucketing key: {:?}", bucket_by);
+                debug!(
+                    "No explicit bucketing expression. Computed bucketing key: {:?}",
+                    bucket_by
+                );
                 distributions = args;
             }
         };
@@ -43,13 +46,16 @@ impl CustomOperator for FractionalOperator {
         // Calculate total weight and collect buckets
         let mut total_weight = 0;
         let mut buckets = Vec::new();
-        
+
         for dist in distributions {
             if let DataValue::Array(arr) = dist {
                 if arr.len() >= 2 {
-                    if let (DataValue::String(variant), DataValue::Number(weight_num)) = (&arr[0], &arr[1]) {
+                    if let (DataValue::String(variant), DataValue::Number(weight_num)) =
+                        (&arr[0], &arr[1])
+                    {
                         let weight = weight_num.as_i64().unwrap_or(1) as i32;
                         total_weight += weight;
+                        // Store variant name as string and weight
                         buckets.push((variant.to_string(), weight));
                         debug!("Added bucket: variant={} weight={}", variant, weight);
                     }
@@ -60,7 +66,7 @@ impl CustomOperator for FractionalOperator {
                 debug!("Invalid bucket definition format: {:?}", dist);
             }
         }
-        
+
         debug!("Total weight of buckets: {}", total_weight);
 
         if total_weight <= 0 {
@@ -81,11 +87,13 @@ impl CustomOperator for FractionalOperator {
             bucket_sum += (weight as f64 * 100.0) / total_weight as f64;
             debug!("Checking bucket: variant={} cumulative_weight_threshold={:.4}, current bucket={:.4}", 
                    variant, bucket_sum, bucket);
-            
+
             if bucket < bucket_sum {
-                debug!("Selected variant: {} for bucket value {:.4}", variant, bucket);
-                // Since DataValue::String expects an &str with a lifetime, we can't use our String directly
-                // Using the string "true" to indicate success
+                debug!(
+                    "Selected variant: {} for bucket value {:.4}",
+                    variant, bucket
+                );
+                // Simply return true, variant is handled at higher level
                 return Ok(DataValue::Bool(true));
             }
         }

@@ -1,9 +1,9 @@
 use anyhow::Result;
-use semver::Version;
-use tracing::debug;
 use datalogic_rs::datalogic::CustomOperator;
 use datalogic_rs::logic::error::LogicError;
 use datalogic_rs::value::DataValue;
+use semver::Version;
+use tracing::debug;
 
 #[derive(Debug)]
 pub struct SemVerOperator;
@@ -17,13 +17,11 @@ impl CustomOperator for SemVerOperator {
 
         // Extract version 1
         let version1 = match &args[0] {
-            DataValue::String(s) => {
-                match Version::parse(s) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        debug!("Failed to parse first version '{}': {}", s, e);
-                        return Ok(DataValue::Null);
-                    }
+            DataValue::String(s) => match Version::parse(s) {
+                Ok(v) => v,
+                Err(e) => {
+                    debug!("Failed to parse first version '{}': {}", s, e);
+                    return Ok(DataValue::Null);
                 }
             },
             _ => {
@@ -43,13 +41,11 @@ impl CustomOperator for SemVerOperator {
 
         // Extract version 2
         let version2 = match &args[2] {
-            DataValue::String(s) => {
-                match Version::parse(s) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        debug!("Failed to parse second version '{}': {}", s, e);
-                        return Ok(DataValue::Null);
-                    }
+            DataValue::String(s) => match Version::parse(s) {
+                Ok(v) => v,
+                Err(e) => {
+                    debug!("Failed to parse second version '{}': {}", s, e);
+                    return Ok(DataValue::Null);
                 }
             },
             _ => {
@@ -74,7 +70,10 @@ impl CustomOperator for SemVerOperator {
             }
         };
 
-        debug!("SemVer comparison: {} {} {} = {}", version1, operator, version2, result);
+        debug!(
+            "SemVer comparison: {} {} {} = {}",
+            version1, operator, version2, result
+        );
         Ok(DataValue::Bool(result))
     }
 }
