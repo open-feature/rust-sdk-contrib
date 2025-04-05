@@ -1,175 +1,90 @@
-use anyhow::Result;
-use datalogic_rs::{JsonLogic, Rule};
+use datalogic_rs::datalogic::DataLogic;
 use open_feature::{EvaluationContext, EvaluationContextFieldValue};
-use serde_json::{json, Map, Value};
-
+use std::collections::HashMap;
+use serde_json::Value;
+use std::sync::{Arc, Mutex};
+use anyhow::{Result, anyhow};
 mod fractional;
 mod semver;
-mod string_comp;
 
-use fractional::Fractional;
-use semver::SemVer;
-use string_comp::{StringComp, StringCompType};
+use fractional::FractionalOperator;
+use semver::SemVerOperator;
 
-#[derive(Clone)]
-pub struct Operator {}
+// Use Arc<Mutex> to make DataLogic thread-safe
+pub struct Operator {
+    data_logic: Arc<Mutex<DataLogic>>,
+}
 
 impl Operator {
-    pub fn new() -> Operator {
-        Operator {}
+    pub fn new() -> Self {
+        let mut data_logic = DataLogic::new();
+        data_logic.register_custom_operator("fractional", Box::new(FractionalOperator));
+        data_logic.register_custom_operator("semver", Box::new(SemVerOperator));
+        Self { data_logic: Arc::new(Mutex::new(data_logic)) }
     }
 
     pub fn apply(
         &self,
         flag_key: &str,
-        targeting_rule: &str,
-        ctx: &EvaluationContext,
+        rule_json: &str,
+        context: &EvaluationContext,
     ) -> Result<Option<String>> {
-        let rule_value: Value = serde_json::from_str(targeting_rule)?;
-        let result = self.evaluate_rule(&rule_value, flag_key, ctx)?;
-        Ok(result.as_str().map(String::from))
-    }
-
-    fn evaluate_rule(
-        &self,
-        rule: &Value,
-        flag_key: &str,
-        ctx: &EvaluationContext,
-    ) -> Result<Value> {
-        match rule {
-            Value::Object(map) => {
-                if let Some((op, args)) = map.iter().next() {
-                    match op.as_str() {
-                        "if" => {
-                            if let Value::Array(conditions) = args {
-                                if conditions.len() >= 2 {
-                                    let condition =
-                                        self.evaluate_rule(&conditions[0], flag_key, ctx)?;
-                                    match condition {
-                                        Value::Bool(true) => Ok(conditions[1].clone()),
-                                        Value::Bool(false) if conditions.len() > 2 => {
-                                            Ok(conditions[2].clone())
-                                        }
-                                        _ => Ok(Value::Null),
-                                    }
-                                } else {
-                                    Ok(Value::Null)
-                                }
-                            } else {
-                                Ok(Value::Null)
-                            }
-                        }
-                        "fractional" => {
-                            if let Value::Array(args) = args {
-                                let data = self.build_evaluation_data(flag_key, ctx);
-                                let data_map = data
-                                    .as_object()
-                                    .map(|obj| {
-                                        obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
-                                    })
-                                    .unwrap_or_default();
-                                Fractional::evaluate(args, &data_map)
-                            } else {
-                                Ok(Value::Null)
-                            }
-                        }
-                        "ends_with" => {
-                            if let Value::Array(args) = args {
-                                let mut resolved_args = Vec::new();
-                                for arg in args {
-                                    match arg {
-                                        Value::Object(_) => {
-                                            resolved_args
-                                                .push(self.evaluate_rule(arg, flag_key, ctx)?);
-                                        }
-                                        _ => resolved_args.push(arg.clone()),
-                                    }
-                                }
-                                StringComp::evaluate(StringCompType::EndsWith, &resolved_args)
-                            } else {
-                                Ok(Value::Null)
-                            }
-                        }
-                        "starts_with" => {
-                            if let Value::Array(args) = args {
-                                let mut resolved_args = Vec::new();
-                                for arg in args {
-                                    match arg {
-                                        Value::Object(_) => {
-                                            resolved_args
-                                                .push(self.evaluate_rule(arg, flag_key, ctx)?);
-                                        }
-                                        _ => resolved_args.push(arg.clone()),
-                                    }
-                                }
-                                StringComp::evaluate(StringCompType::StartsWith, &resolved_args)
-                            } else {
-                                Ok(Value::Null)
-                            }
-                        }
-                        "sem_ver" => {
-                            if let Value::Array(args) = args {
-                                let mut resolved_args = Vec::new();
-                                for arg in args {
-                                    match arg {
-                                        Value::Object(_) => {
-                                            resolved_args
-                                                .push(self.evaluate_rule(arg, flag_key, ctx)?);
-                                        }
-                                        _ => resolved_args.push(arg.clone()),
-                                    }
-                                }
-                                SemVer::evaluate(&resolved_args)
-                            } else {
-                                Ok(Value::Null)
-                            }
-                        }
-                        "var" => {
-                            if let Some(path) = args.as_str() {
-                                let data = self.build_evaluation_data(flag_key, ctx);
-                                Ok(data.get(path).cloned().unwrap_or(Value::Null))
-                            } else {
-                                Ok(Value::Null)
-                            }
-                        }
-                        _ => {
-                            let rule = Rule::from_value(rule)?;
-                            let data = self.build_evaluation_data(flag_key, ctx);
-                            Ok(JsonLogic::apply(&rule, &data)?)
-                        }
-                    }
-                } else {
-                    Ok(rule.clone())
+        let evaluation_context = self.convert_context_to_json(context);
+        let rule: Value = serde_json::from_str(rule_json)
+            .map_err(|e| anyhow!("Failed to parse rule JSON: {}", e))?;
+        
+        let data = self.build_evaluation_data(&evaluation_context, flag_key);
+        
+        // Use evaluate_str method for DataLogic
+        let rule_str = rule.to_string();
+        let data_str = serde_json::to_string(&data)
+            .map_err(|e| anyhow!("Failed to serialize data: {}", e))?;
+        
+        // Lock the mutex to access data_logic
+        let data_logic = self.data_logic.lock()
+            .map_err(|_| anyhow!("Failed to acquire lock on DataLogic"))?;
+        
+        let result = data_logic.evaluate_str(&rule_str, &data_str, None)
+            .map_err(|e| anyhow!("DataLogic evaluation error: {}", e))?;
+        
+        // Extract the variant from the result if it's a truthy value
+        if result.as_bool().unwrap_or(false) {
+            if let Some(obj) = rule.as_object() {
+                if let Some(variant) = obj.get("variant").and_then(|v| v.as_str()) {
+                    return Ok(Some(variant.to_string()));
                 }
             }
-            _ => Ok(rule.clone()),
+            Ok(Some("true".to_string()))
+        } else {
+            Ok(None)
         }
     }
 
-    fn build_evaluation_data(&self, flag_key: &str, ctx: &EvaluationContext) -> Value {
-        let mut data = Map::new();
-
-        if let Some(targeting_key) = &ctx.targeting_key {
-            data.insert(
-                "targetingKey".to_string(),
-                Value::String(targeting_key.clone()),
-            );
+    fn convert_context_to_json(&self, context: &EvaluationContext) -> Value {
+        let mut map = serde_json::Map::new();
+        
+        // Add targeting key if present
+        if let Some(targeting_key) = &context.targeting_key {
+            map.insert("targetingKey".to_string(), Value::String(targeting_key.clone()));
         }
-
-        let flagd_props = json!({
-            "flagKey": flag_key,
-            "timestamp": std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs()
-        });
-        data.insert("$flagd".to_string(), flagd_props);
-
-        for (key, value) in &ctx.custom_fields {
-            data.insert(key.clone(), context_value_to_json(value));
+        
+        // Add custom fields
+        for (key, value) in &context.custom_fields {
+            map.insert(key.clone(), context_value_to_json(value));
         }
+        
+        Value::Object(map)
+    }
 
-        Value::Object(data)
+    fn build_evaluation_data(&self, evaluation_context: &Value, flag_key: &str) -> HashMap<String, Value> {
+        let mut data = HashMap::new();
+        if let Value::Object(obj) = evaluation_context {
+            for (key, value) in obj {
+                data.insert(key.clone(), value.clone());
+            }
+        }
+        data.insert("flagKey".to_string(), Value::String(flag_key.to_string()));
+        data
     }
 }
 

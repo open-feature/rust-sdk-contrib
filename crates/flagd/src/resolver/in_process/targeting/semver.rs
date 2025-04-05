@@ -1,31 +1,65 @@
 use anyhow::Result;
 use semver::Version;
-use serde_json::Value;
+use tracing::debug;
+use datalogic_rs::datalogic::CustomOperator;
+use datalogic_rs::logic::error::LogicError;
+use datalogic_rs::value::DataValue;
 
-pub struct SemVer;
+#[derive(Debug)]
+pub struct SemVerOperator;
 
-impl SemVer {
-    pub fn evaluate(args: &[Value]) -> Result<Value> {
+impl CustomOperator for SemVerOperator {
+    fn evaluate(&self, args: &[DataValue]) -> Result<DataValue, LogicError> {
         if args.len() != 3 {
-            return Ok(Value::Null);
+            debug!("SemVer comparison requires exactly 3 arguments");
+            return Err(LogicError::InvalidArgumentsError);
         }
 
-        let version1 = match args[0].as_str().and_then(|s| Version::parse(s).ok()) {
-            Some(v) => v,
-            None => return Ok(Value::Null),
+        // Extract version 1
+        let version1 = match &args[0] {
+            DataValue::String(s) => {
+                match Version::parse(s) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        debug!("Failed to parse first version '{}': {}", s, e);
+                        return Ok(DataValue::Null);
+                    }
+                }
+            },
+            _ => {
+                debug!("First argument must be a string representing a version");
+                return Ok(DataValue::Null);
+            }
         };
 
-        let operator = match args[1].as_str() {
-            Some(op) => op,
-            None => return Ok(Value::Null),
+        // Extract operator
+        let operator = match &args[1] {
+            DataValue::String(op) => op,
+            _ => {
+                debug!("Second argument must be a string representing the comparison operator");
+                return Ok(DataValue::Null);
+            }
         };
 
-        let version2 = match args[2].as_str().and_then(|s| Version::parse(s).ok()) {
-            Some(v) => v,
-            None => return Ok(Value::Null),
+        // Extract version 2
+        let version2 = match &args[2] {
+            DataValue::String(s) => {
+                match Version::parse(s) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        debug!("Failed to parse second version '{}': {}", s, e);
+                        return Ok(DataValue::Null);
+                    }
+                }
+            },
+            _ => {
+                debug!("Third argument must be a string representing a version");
+                return Ok(DataValue::Null);
+            }
         };
 
-        let result = match operator {
+        // Perform comparison
+        let result = match *operator {
             "=" => version1 == version2,
             "!=" => version1 != version2,
             "<" => version1 < version2,
@@ -34,9 +68,13 @@ impl SemVer {
             ">=" => version1 >= version2,
             "^" => version1.major == version2.major,
             "~" => version1.major == version2.major && version1.minor == version2.minor,
-            _ => return Ok(Value::Null),
+            _ => {
+                debug!("Unsupported operator: {}", operator);
+                return Ok(DataValue::Null);
+            }
         };
 
-        Ok(Value::Bool(result))
+        debug!("SemVer comparison: {} {} {} = {}", version1, operator, version2, result);
+        Ok(DataValue::Bool(result))
     }
 }

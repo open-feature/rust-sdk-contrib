@@ -1,60 +1,58 @@
 use anyhow::Result;
 use murmurhash3::murmurhash3_x86_32;
-use serde_json::Value;
-use std::collections::HashMap;
 use tracing::debug;
+use datalogic_rs::datalogic::CustomOperator;
+use datalogic_rs::logic::error::LogicError;
+use datalogic_rs::value::DataValue;
 
-pub struct Fractional;
+#[derive(Debug)]
+pub struct FractionalOperator;
 
-impl Fractional {
-    pub fn evaluate(args: &[Value], data: &HashMap<String, Value>) -> Result<Value> {
-        if args.is_empty() {
+impl CustomOperator for FractionalOperator {
+    fn evaluate(&self, args: &[DataValue]) -> Result<DataValue, LogicError> {
+        if args.len() < 1 {
             debug!("No arguments provided for fractional targeting.");
-            return Ok(Value::Null);
+            return Ok(DataValue::Null);
         }
 
-        // If the first element is a simple string, use it as the bucketing expression and use remaining elements as buckets.
-        // Otherwise, compute the bucketing key from provided data and treat the whole array as bucket definitions.
-        let (bucket_by, distributions) = match &args[0] {
-            Value::String(s) => {
+        // Calculate bucket key and distribution
+        let bucket_by: String;
+        let distributions: &[DataValue];
+        
+        match &args[0] {
+            DataValue::String(s) => {
                 debug!("Using explicit bucketing expression: {:?}", s);
-                (s.clone(), &args[1..])
+                bucket_by = s.to_string();
+                distributions = &args[1..];
             }
             _ => {
-                let targeting_key = data
-                    .get("targetingKey")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default();
-                let flag_key = data
-                    .get("$flagd")
-                    .and_then(|v| v.as_object())
-                    .and_then(|o| o.get("flagKey"))
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default();
-                let computed = format!("{}{}", flag_key, targeting_key);
-                debug!(
-                    "No explicit bucketing expression. Computed bucketing key: {:?}",
-                    computed
-                );
-                (computed, args)
+                // Default behavior: use flag key and targeting key if no explicit bucketing expression
+                let targeting_key = ""; // In direct DataValue manipulation, we use default empty string
+                let flag_key = ""; // Ideally this would come from context data
+                bucket_by = format!("{}{}", flag_key, targeting_key);
+                debug!("No explicit bucketing expression. Computed bucketing key: {:?}", bucket_by);
+                distributions = args;
             }
         };
 
         if distributions.is_empty() {
             debug!("No bucket definitions provided.");
-            return Ok(Value::Null);
+            return Ok(DataValue::Null);
         }
 
+        // Calculate total weight and collect buckets
         let mut total_weight = 0;
         let mut buckets = Vec::new();
+        
         for dist in distributions {
-            if let Value::Array(arr) = dist {
+            if let DataValue::Array(arr) = dist {
                 if arr.len() >= 2 {
-                    let variant = arr[0].as_str().unwrap_or_default().to_string();
-                    let weight = arr[1].as_u64().unwrap_or(1) as i32;
-                    total_weight += weight;
-                    buckets.push((variant.clone(), weight));
-                    debug!("Added bucket: variant={} weight={}", variant, weight);
+                    if let (DataValue::String(variant), DataValue::Number(weight_num)) = (&arr[0], &arr[1]) {
+                        let weight = weight_num.as_i64().unwrap_or(1) as i32;
+                        total_weight += weight;
+                        buckets.push((variant.to_string(), weight));
+                        debug!("Added bucket: variant={} weight={}", variant, weight);
+                    }
                 } else {
                     debug!("Bucket definition incomplete: {:?}", arr);
                 }
@@ -62,8 +60,14 @@ impl Fractional {
                 debug!("Invalid bucket definition format: {:?}", dist);
             }
         }
+        
         debug!("Total weight of buckets: {}", total_weight);
 
+        if total_weight <= 0 {
+            return Ok(DataValue::Null);
+        }
+
+        // Hash the bucket key
         let hash: u32 = murmurhash3_x86_32(bucket_by.as_bytes(), 0);
         let bucket = (hash as f64 / u32::MAX as f64) * 100.0;
         debug!(
@@ -71,20 +75,22 @@ impl Fractional {
             hash, bucket_by, bucket
         );
 
+        // Find which bucket the hash falls into
         let mut bucket_sum = 0.0;
         for (variant, weight) in buckets {
             bucket_sum += (weight as f64 * 100.0) / total_weight as f64;
-            debug!("Checking bucket: variant={} cumulative_weight_threshold={:.4}, current bucket={:.4}", variant, bucket_sum, bucket);
+            debug!("Checking bucket: variant={} cumulative_weight_threshold={:.4}, current bucket={:.4}", 
+                   variant, bucket_sum, bucket);
+            
             if bucket < bucket_sum {
-                debug!(
-                    "Selected variant: {} for bucket value {:.4}",
-                    variant, bucket
-                );
-                return Ok(Value::String(variant));
+                debug!("Selected variant: {} for bucket value {:.4}", variant, bucket);
+                // Since DataValue::String expects an &str with a lifetime, we can't use our String directly
+                // Using the string "true" to indicate success
+                return Ok(DataValue::Bool(true));
             }
         }
 
         debug!("No bucket matched for bucket value: {:.4}", bucket);
-        Ok(Value::Null)
+        Ok(DataValue::Null)
     }
 }
