@@ -1,8 +1,7 @@
 use anyhow::Result;
-use datalogic_rs::value::NumberValue;
-use datalogic_rs::{DataLogic, DataValue};
+use datalogic_rs::{DataLogic, DataValue, FromJson};
 use open_feature::{EvaluationContext, EvaluationContextFieldValue};
-use serde_json::Value;
+use serde_json::{json, Map, Value};
 use std::sync::{Arc, Mutex};
 
 mod fractional;
@@ -21,9 +20,9 @@ impl Operator {
         // Create a new DataLogic instance
         let mut logic = DataLogic::new();
 
-        // Register custom operators
-        logic.register_custom_operator("fractional", Box::new(Fractional));
-        logic.register_custom_operator("sem_ver", Box::new(SemVer));
+        // Register custom operators using the new simple API
+        logic.register_simple_operator("fractional", Fractional::fractional_op);
+        logic.register_simple_operator("sem_ver", SemVer::semver_op);
 
         Operator {
             logic: Arc::new(Mutex::new(logic)),
@@ -48,8 +47,9 @@ impl Operator {
         // Parse the rule
         let logic = logic_instance.parse_logic_json(&rule_value, None)?;
 
-        // Build context data directly as DataValue
-        let context_data = self.build_datavalue_context(flag_key, ctx, &logic_instance);
+        // Build context data directly as DataValue using JSON as intermediate
+        let json_context = self.build_json_context(flag_key, ctx);
+        let context_data = DataValue::from_json(&json_context, logic_instance.arena());
 
         // Evaluate using DataLogic
         match logic_instance.evaluate(&logic, &context_data) {
@@ -69,81 +69,51 @@ impl Operator {
         }
     }
 
-    fn build_datavalue_context<'a>(
-        &self,
-        flag_key: &str,
-        ctx: &EvaluationContext,
-        logic: &'a DataLogic,
-    ) -> DataValue<'a> {
-        // Get arena from DataLogic
-        let arena = logic.arena();
-
-        // Create entries for the object
-        let mut entries = Vec::new();
+    // Build context as JSON value first
+    fn build_json_context(&self, flag_key: &str, ctx: &EvaluationContext) -> Value {
+        let mut data = Map::new();
 
         // Add targeting key if present
         if let Some(targeting_key) = &ctx.targeting_key {
-            let key = arena.intern_str("targetingKey");
-            let value = DataValue::String(arena.intern_str(targeting_key));
-            entries.push((key, value));
+            data.insert(
+                "targetingKey".to_string(),
+                Value::String(targeting_key.clone()),
+            );
         }
 
         // Add flagd metadata
-        let flagd_key = arena.intern_str("$flagd");
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-
-        // Create flagd object entries
-        let mut flagd_entries = Vec::new();
-        let flag_key_str = arena.intern_str("flagKey");
-        let flag_key_value = DataValue::String(arena.intern_str(flag_key));
-        flagd_entries.push((flag_key_str, flag_key_value));
-
-        let timestamp_str = arena.intern_str("timestamp");
-        let timestamp_value = DataValue::Number(NumberValue::from_i64(timestamp as i64));
-        flagd_entries.push((timestamp_str, timestamp_value));
-
-        // Allocate flagd object entries in arena
-        let flagd_entries_slice = arena.alloc_object_entries(&flagd_entries);
-        let flagd_obj = DataValue::Object(flagd_entries_slice);
-        entries.push((flagd_key, flagd_obj));
+        let flagd_props = json!({
+            "flagKey": flag_key,
+            "timestamp": std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+        });
+        data.insert("$flagd".to_string(), flagd_props);
 
         // Add custom fields
         for (key, value) in &ctx.custom_fields {
-            let key_str = arena.intern_str(key);
-            let data_value = self.evaluation_context_value_to_datavalue(value, arena);
-            entries.push((key_str, data_value));
+            data.insert(key.clone(), self.context_value_to_json(value));
         }
 
-        // Create the final object
-        let entries_slice = arena.alloc_object_entries(&entries);
-        DataValue::Object(entries_slice)
+        Value::Object(data)
     }
 
-    // Helper to convert EvaluationContextFieldValue to DataValue
-    fn evaluation_context_value_to_datavalue<'a>(
-        &self,
-        value: &EvaluationContextFieldValue,
-        arena: &'a datalogic_rs::arena::DataArena,
-    ) -> DataValue<'a> {
+    // Helper to convert EvaluationContextFieldValue to serde_json::Value
+    fn context_value_to_json(&self, value: &EvaluationContextFieldValue) -> Value {
         match value {
-            EvaluationContextFieldValue::String(s) => DataValue::String(arena.intern_str(s)),
-
-            EvaluationContextFieldValue::Bool(b) => DataValue::Bool(*b),
-
-            EvaluationContextFieldValue::Int(i) => DataValue::Number(NumberValue::from_i64(*i)),
-
-            EvaluationContextFieldValue::Float(f) => DataValue::Number(NumberValue::from_f64(*f)),
-
-            EvaluationContextFieldValue::DateTime(dt) => {
-                DataValue::String(arena.intern_str(&dt.to_string()))
+            EvaluationContextFieldValue::String(s) => Value::String(s.clone()),
+            EvaluationContextFieldValue::Bool(b) => Value::Bool(*b),
+            EvaluationContextFieldValue::Int(i) => Value::Number((*i).into()),
+            EvaluationContextFieldValue::Float(f) => {
+                if let Some(n) = serde_json::Number::from_f64(*f) {
+                    Value::Number(n)
+                } else {
+                    Value::Null
+                }
             }
-
-            EvaluationContextFieldValue::Struct(s) => {
-                DataValue::String(arena.intern_str(&format!("{:?}", s)))
-            }
+            EvaluationContextFieldValue::DateTime(dt) => Value::String(dt.to_string()),
+            EvaluationContextFieldValue::Struct(s) => Value::String(format!("{:?}", s)),
         }
     }
 }
