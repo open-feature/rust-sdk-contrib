@@ -1,6 +1,6 @@
 use anyhow::Result;
 use datalogic_rs::DataLogic;
-use datalogic_rs::{value::NumberValue, DataValue};
+use datalogic_rs::{DataValue, FromJson};
 use open_feature::{EvaluationContext, EvaluationContextFieldValue};
 use serde_json::Value;
 use std::sync::{Arc, Mutex};
@@ -75,75 +75,69 @@ impl Operator {
         ctx: &EvaluationContext,
         logic: &'a DataLogic,
     ) -> DataValue<'a> {
-        // Get arena from DataLogic
-        let arena = logic.arena();
-
-        // Create entries for the object
-        let mut entries = Vec::new();
+        // Create a JSON object for our context
+        let mut root = serde_json::Map::new();
 
         // Add targeting key if present
         if let Some(targeting_key) = &ctx.targeting_key {
-            let key = arena.intern_str("targetingKey");
-            let value = DataValue::String(arena.intern_str(targeting_key));
-            entries.push((key, value));
+            root.insert(
+                "targetingKey".to_string(),
+                serde_json::Value::String(targeting_key.clone()),
+            );
         }
 
         // Add flagd metadata
-        let flagd_key = arena.intern_str("$flagd");
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
 
-        // Create flagd object entries
-        let mut flagd_entries = Vec::new();
-        let flag_key_str = arena.intern_str("flagKey");
-        let flag_key_value = DataValue::String(arena.intern_str(flag_key));
-        flagd_entries.push((flag_key_str, flag_key_value));
+        // Create flagd object
+        let mut flagd = serde_json::Map::new();
+        flagd.insert(
+            "flagKey".to_string(),
+            serde_json::Value::String(flag_key.to_string()),
+        );
+        flagd.insert(
+            "timestamp".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(timestamp)),
+        );
 
-        let timestamp_str = arena.intern_str("timestamp");
-        let timestamp_value = DataValue::Number(NumberValue::from_i64(timestamp as i64));
-        flagd_entries.push((timestamp_str, timestamp_value));
-
-        // Allocate flagd object entries in arena
-        let flagd_entries_slice = arena.alloc_object_entries(&flagd_entries);
-        let flagd_obj = DataValue::Object(flagd_entries_slice);
-        entries.push((flagd_key, flagd_obj));
+        // Add flagd object to main object
+        root.insert("$flagd".to_string(), serde_json::Value::Object(flagd));
 
         // Add custom fields
         for (key, value) in &ctx.custom_fields {
-            let key_str = arena.intern_str(key);
-            let data_value = self.evaluation_context_value_to_datavalue(value, arena);
-            entries.push((key_str, data_value));
+            root.insert(key.clone(), self.evaluation_context_value_to_json(value));
         }
 
-        // Create the final object
-        let entries_slice = arena.alloc_object_entries(&entries);
-        DataValue::Object(entries_slice)
+        // Create the JSON object
+        let json_value = serde_json::Value::Object(root);
+
+        // Convert JSON to DataValue using the arena
+        DataValue::from_json(&json_value, logic.arena())
     }
 
-    // Helper to convert EvaluationContextFieldValue to DataValue
-    fn evaluation_context_value_to_datavalue<'a>(
+    // Helper to convert EvaluationContextFieldValue to serde_json::Value
+    fn evaluation_context_value_to_json(
         &self,
         value: &EvaluationContextFieldValue,
-        arena: &'a datalogic_rs::arena::DataArena,
-    ) -> DataValue<'a> {
+    ) -> serde_json::Value {
         match value {
-            EvaluationContextFieldValue::String(s) => DataValue::String(arena.intern_str(s)),
-
-            EvaluationContextFieldValue::Bool(b) => DataValue::Bool(*b),
-
-            EvaluationContextFieldValue::Int(i) => DataValue::Number(NumberValue::from_i64(*i)),
-
-            EvaluationContextFieldValue::Float(f) => DataValue::Number(NumberValue::from_f64(*f)),
-
-            EvaluationContextFieldValue::DateTime(dt) => {
-                DataValue::String(arena.intern_str(&dt.to_string()))
+            EvaluationContextFieldValue::String(s) => serde_json::Value::String(s.clone()),
+            EvaluationContextFieldValue::Bool(b) => serde_json::Value::Bool(*b),
+            EvaluationContextFieldValue::Int(i) => {
+                serde_json::Value::Number(serde_json::Number::from(*i))
             }
-
-            EvaluationContextFieldValue::Struct(s) => {
-                DataValue::String(arena.intern_str(&format!("{:?}", s)))
+            EvaluationContextFieldValue::Float(f) => {
+                if let Some(num) = serde_json::Number::from_f64(*f) {
+                    serde_json::Value::Number(num)
+                } else {
+                    serde_json::Value::Null
+                }
             }
+            EvaluationContextFieldValue::DateTime(dt) => serde_json::Value::String(dt.to_string()),
+            EvaluationContextFieldValue::Struct(s) => serde_json::Value::String(format!("{:?}", s)),
         }
     }
 }
