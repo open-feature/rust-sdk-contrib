@@ -1,6 +1,6 @@
 use anyhow::Result;
-use datalogic_rs::value::NumberValue;
-use datalogic_rs::{DataLogic, DataValue};
+use datalogic_rs::DataLogic;
+use datalogic_rs::{value::NumberValue, DataValue};
 use open_feature::{EvaluationContext, EvaluationContextFieldValue};
 use serde_json::Value;
 use std::sync::{Arc, Mutex};
@@ -8,8 +8,8 @@ use std::sync::{Arc, Mutex};
 mod fractional;
 mod semver;
 
-use fractional::Fractional;
-use semver::SemVer;
+use fractional::fractional_fn;
+use semver::sem_ver_fn;
 
 pub struct Operator {
     // Wrap DataLogic in Arc<Mutex<_>> to make it thread-safe
@@ -21,9 +21,9 @@ impl Operator {
         // Create a new DataLogic instance
         let mut logic = DataLogic::new();
 
-        // Register custom operators
-        logic.register_custom_operator("fractional", Box::new(Fractional));
-        logic.register_custom_operator("sem_ver", Box::new(SemVer));
+        // Register simple operators
+        logic.register_simple_operator("fractional", fractional_fn);
+        logic.register_simple_operator("sem_ver", sem_ver_fn);
 
         Operator {
             logic: Arc::new(Mutex::new(logic)),
