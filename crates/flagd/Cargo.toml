@@ -57,4 +57,4 @@ murmurhash3 = "0.0.5"
 tower = "0.5"
 hyper-util = { version = "0.1", features = ["tokio"] }
 thiserror = "2.0"
-datalogic-rs = "2.1.15"
+datalogic-rs = "3.0.21"

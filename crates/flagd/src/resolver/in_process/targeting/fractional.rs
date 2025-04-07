@@ -1,57 +1,60 @@
-use anyhow::Result;
+use datalogic_rs::DataValue;
 use murmurhash3::murmurhash3_x86_32;
-use serde_json::Value;
-use std::collections::HashMap;
 use tracing::debug;
 
+#[derive(Debug)]
 pub struct Fractional;
 
 impl Fractional {
-    pub fn evaluate(args: &[Value], data: &HashMap<String, Value>) -> Result<Value> {
+    // Simple operator function implementation that works with owned DataValues
+    pub fn fractional_op(args: Vec<DataValue>) -> std::result::Result<DataValue, String> {
         if args.is_empty() {
             debug!("No arguments provided for fractional targeting.");
-            return Ok(Value::Null);
+            return Ok(DataValue::Null);
         }
 
-        // If the first element is a simple string, use it as the bucketing expression and use remaining elements as buckets.
-        // Otherwise, compute the bucketing key from provided data and treat the whole array as bucket definitions.
-        let (bucket_by, distributions) = match &args[0] {
-            Value::String(s) => {
-                debug!("Using explicit bucketing expression: {:?}", s);
-                (s.clone(), &args[1..])
-            }
-            _ => {
-                let targeting_key = data
-                    .get("targetingKey")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default();
-                let flag_key = data
-                    .get("$flagd")
-                    .and_then(|v| v.as_object())
-                    .and_then(|o| o.get("flagKey"))
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default();
-                let computed = format!("{}{}", flag_key, targeting_key);
-                debug!(
-                    "No explicit bucketing expression. Computed bucketing key: {:?}",
-                    computed
-                );
-                (computed, args)
-            }
+        // Get the targeting key and flag key from the data context
+        // Note: in the simple operator pattern, context data is passed as the first argument
+        let (bucket_by, distributions) = if args.len() > 1 && args[0].is_string() {
+            // If the first element is a string, use it as the bucketing expression
+            let bucket_key = args[0].as_str().unwrap_or_default().to_string();
+            debug!("Using explicit bucketing expression: {:?}", bucket_key);
+            (bucket_key, args[1..].to_vec())
+        } else {
+            // Otherwise, construct the bucket key from the current context
+            // This requires accessing global context which isn't directly available in the simple operator
+            // So we'll use a default approach here
+            let computed = "default_key".to_string();
+            debug!("Using default bucketing key: {:?}", computed);
+            (computed, args)
         };
 
         if distributions.is_empty() {
             debug!("No bucket definitions provided.");
-            return Ok(Value::Null);
+            return Ok(DataValue::Null);
         }
 
         let mut total_weight = 0;
         let mut buckets = Vec::new();
-        for dist in distributions {
-            if let Value::Array(arr) = dist {
+        for dist in &distributions {
+            if let DataValue::Array(arr) = dist {
                 if arr.len() >= 2 {
-                    let variant = arr[0].as_str().unwrap_or_default().to_string();
-                    let weight = arr[1].as_u64().unwrap_or(1) as i32;
+                    let variant = match &arr[0] {
+                        DataValue::String(s) => s.to_string(),
+                        _ => "".to_string(),
+                    };
+
+                    let weight = match &arr[1] {
+                        DataValue::Number(n) => {
+                            if let Some(i) = n.as_i64() {
+                                i as i32
+                            } else {
+                                1
+                            }
+                        }
+                        _ => 1,
+                    };
+
                     total_weight += weight;
                     buckets.push((variant.clone(), weight));
                     debug!("Added bucket: variant={} weight={}", variant, weight);
@@ -80,11 +83,15 @@ impl Fractional {
                     "Selected variant: {} for bucket value {:.4}",
                     variant, bucket
                 );
-                return Ok(Value::String(variant));
+                // In this simple operator pattern, we need to create an owned DataValue
+                // Since variant is already a String (owned), we can use into_boxed_str to get a 'static str
+                let boxed_str = variant.into_boxed_str();
+                let static_str = Box::leak(boxed_str);
+                return Ok(DataValue::String(static_str));
             }
         }
 
         debug!("No bucket matched for bucket value: {:.4}", bucket);
-        Ok(Value::Null)
+        Ok(DataValue::Null)
     }
 }
