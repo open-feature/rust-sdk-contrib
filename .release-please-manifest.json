@@ -1,5 +1,5 @@
 {
   "crates/env-var": "0.1.0",
-  "crates/flagd": "0.0.4",
+  "crates/flagd": "0.0.5",
   "crates/flipt": "0.1.0"
 }
