@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.0.6](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagd-v0.0.5...open-feature-flagd-v0.0.6) (2025-04-09)
+
+
+### 🐛 Bug Fixes
+
+* **deps:** update datalogic_rs to 3.0.x latest version ([#39](https://github.com/open-feature/rust-sdk-contrib/issues/39)) ([8c9c747](https://github.com/open-feature/rust-sdk-contrib/commit/8c9c747cd1fcb5a64155433f0c653d7f1d19daa7))
+
+
+### 🧹 Chore
+
+* striped away the openssl dependency and use rustls instead ([#34](https://github.com/open-feature/rust-sdk-contrib/issues/34)) ([eacf2bd](https://github.com/open-feature/rust-sdk-contrib/commit/eacf2bdc3a3deaf43fb8f086288b527451d3e3c8))
+
 ## [0.0.5](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagd-v0.0.4...open-feature-flagd-v0.0.5) (2025-03-24)
 
 
