@@ -93,18 +93,18 @@ impl Operator {
             .as_secs();
 
         // Create flagd object
-        let mut flagd = serde_json::Map::new();
-        flagd.insert(
+        let mut flagd_props = serde_json::Map::new();
+        flagd_props.insert(
             "flagKey".to_string(),
             serde_json::Value::String(flag_key.to_string()),
         );
-        flagd.insert(
+        flagd_props.insert(
             "timestamp".to_string(),
             serde_json::Value::Number(serde_json::Number::from(timestamp)),
         );
 
         // Add flagd object to main object
-        root.insert("$flagd".to_string(), serde_json::Value::Object(flagd));
+        root.insert("$flagd".to_string(), serde_json::Value::Object(flagd_props));
 
         // Add custom fields
         for (key, value) in &ctx.custom_fields {
