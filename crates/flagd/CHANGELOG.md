@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.7](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagd-v0.0.6...open-feature-flagd-v0.0.7) (2025-05-06)
+
+
+### 🧹 Chore
+
+* **deps:** update rust crate testcontainers to 0.24.0 ([#42](https://github.com/open-feature/rust-sdk-contrib/issues/42)) ([b24b54d](https://github.com/open-feature/rust-sdk-contrib/commit/b24b54d9c112205c2f41264b51836c2d428594b6))
+
 ## [0.0.6](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagd-v0.0.5...open-feature-flagd-v0.0.6) (2025-04-12)
 
 
