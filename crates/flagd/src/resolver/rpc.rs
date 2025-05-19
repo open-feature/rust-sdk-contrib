@@ -92,7 +92,9 @@ pub struct RpcResolver {
 
 impl RpcResolver {
     #[instrument(skip(options))]
-    pub async fn new(options: &FlagdOptions) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn new(
+        options: &FlagdOptions,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         debug!("initializing RPC resolver connection to {}", options.host);
 
         let mut retry_delay = Duration::from_millis(options.retry_backoff_ms as u64);
