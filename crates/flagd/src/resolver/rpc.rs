@@ -92,7 +92,7 @@ pub struct RpcResolver {
 
 impl RpcResolver {
     #[instrument(skip(options))]
-    pub async fn new(options: &FlagdOptions) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new(options: &FlagdOptions) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         debug!("initializing RPC resolver connection to {}", options.host);
 
         let mut retry_delay = Duration::from_millis(options.retry_backoff_ms as u64);
@@ -131,7 +131,7 @@ impl RpcResolver {
 
     async fn establish_connection(
         options: &FlagdOptions,
-    ) -> Result<ClientType, Box<dyn std::error::Error>> {
+    ) -> Result<ClientType, Box<dyn std::error::Error + Send + Sync>> {
         if let Some(socket_path) = &options.socket_path {
             debug!("Attempting Unix socket connection to: {}", socket_path);
             let socket_path = socket_path.clone();
