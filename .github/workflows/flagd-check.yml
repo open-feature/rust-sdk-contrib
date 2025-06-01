@@ -39,4 +39,10 @@ jobs:
         run: |
           cargo readme --no-title --no-license > README.md.generated
           diff README.md README.md.generated
+          
+      - name: Install and run cargo-audit
+        run: |
+          cargo install cargo-audit --locked
+          # Run from root directory where Cargo.lock is located
+          cargo audit
 
