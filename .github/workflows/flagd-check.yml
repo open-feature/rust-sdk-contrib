@@ -41,8 +41,8 @@ jobs:
           diff README.md README.md.generated
           
       - name: Install and run cargo-audit
-        working-directory: crates/flagd
         run: |
           cargo install cargo-audit --locked
+          # Run from root directory where Cargo.lock is located
           cargo audit
 
