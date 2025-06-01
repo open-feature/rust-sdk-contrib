@@ -50,6 +50,7 @@ use open_feature::{
 };
 use serde_json;
 use tracing::{debug, error, instrument};
+use reqwest::Client;
 
 use crate::FlagdOptions;
 
@@ -60,6 +61,8 @@ pub struct RestResolver {
     endpoint: String,
     /// Provider metadata
     metadata: ProviderMetadata,
+    /// HTTP client for making requests
+    client: Client,
 }
 
 impl RestResolver {
@@ -81,6 +84,7 @@ impl RestResolver {
         Self {
             endpoint,
             metadata: ProviderMetadata::new("flagd-rest-provider"),
+            client: Client::new(),
         }
     }
 }
@@ -108,12 +112,12 @@ impl FeatureProvider for RestResolver {
         evaluation_context: &EvaluationContext,
     ) -> EvaluationResult<ResolutionDetails<bool>> {
         debug!("Resolving boolean flag");
-        let client = reqwest::Client::new();
+    
         let payload = serde_json::json!({
             "context": context_to_json(evaluation_context)
         });
 
-        let response = client
+        let response = self.client
             .post(format!(
                 "{}/ofrep/v1/evaluate/flags/{}",
                 self.endpoint, flag_key
@@ -176,12 +180,12 @@ impl FeatureProvider for RestResolver {
         evaluation_context: &EvaluationContext,
     ) -> EvaluationResult<ResolutionDetails<String>> {
         debug!("Resolving string flag");
-        let client = reqwest::Client::new();
+    
         let payload = serde_json::json!({
             "context": context_to_json(evaluation_context)
         });
 
-        let response = client
+        let response = self.client
             .post(format!(
                 "{}/ofrep/v1/evaluate/flags/{}",
                 self.endpoint, flag_key
@@ -247,12 +251,12 @@ impl FeatureProvider for RestResolver {
         evaluation_context: &EvaluationContext,
     ) -> EvaluationResult<ResolutionDetails<f64>> {
         debug!("Resolving float flag");
-        let client = reqwest::Client::new();
+    
         let payload = serde_json::json!({
             "context": context_to_json(evaluation_context)
         });
 
-        let response = client
+        let response = self.client
             .post(format!(
                 "{}/ofrep/v1/evaluate/flags/{}",
                 self.endpoint, flag_key
@@ -313,12 +317,12 @@ impl FeatureProvider for RestResolver {
         evaluation_context: &EvaluationContext,
     ) -> EvaluationResult<ResolutionDetails<i64>> {
         debug!("Resolving integer flag");
-        let client = reqwest::Client::new();
+    
         let payload = serde_json::json!({
             "context": context_to_json(evaluation_context)
         });
 
-        let response = client
+        let response = self.client
             .post(format!(
                 "{}/ofrep/v1/evaluate/flags/{}",
                 self.endpoint, flag_key
@@ -382,12 +386,12 @@ impl FeatureProvider for RestResolver {
         evaluation_context: &EvaluationContext,
     ) -> EvaluationResult<ResolutionDetails<StructValue>> {
         debug!("Resolving struct flag");
-        let client = reqwest::Client::new();
+    
         let payload = serde_json::json!({
             "context": context_to_json(evaluation_context)
         });
 
-        let response = client
+        let response = self.client
             .post(format!(
                 "{}/ofrep/v1/evaluate/flags/{}",
                 self.endpoint, flag_key
