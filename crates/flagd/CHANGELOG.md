@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.0.7](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagd-v0.0.6...open-feature-flagd-v0.0.7) (2025-06-01)
+
+
+### ✨ New Features
+
+* Add `Send + Sync` trait bounds to error types in flagd `RpcResolver` ([#46](https://github.com/open-feature/rust-sdk-contrib/issues/46)) ([7959cf3](https://github.com/open-feature/rust-sdk-contrib/commit/7959cf35e73722c0d53834729a0beab8a8d3d046))
+
+
+### 🧹 Chore
+
+* **deps:** update rust crate testcontainers to 0.24.0 ([#42](https://github.com/open-feature/rust-sdk-contrib/issues/42)) ([b24b54d](https://github.com/open-feature/rust-sdk-contrib/commit/b24b54d9c112205c2f41264b51836c2d428594b6))
+
+
+### 🚀 Performance
+
+* chore: flagd: Update dependencies, reuse reqwest client for better performance, add cargo audit to CI ([#47](https://github.com/open-feature/rust-sdk-contrib/issues/47)) ([b6425f4](https://github.com/open-feature/rust-sdk-contrib/commit/b6425f447bb8e91abaa1ab35cf16a89437d62f47))
+
 ## [0.0.6](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagd-v0.0.5...open-feature-flagd-v0.0.6) (2025-04-12)
 
 
