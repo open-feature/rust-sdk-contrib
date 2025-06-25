@@ -139,6 +139,30 @@ impl FeatureProvider for RestResolver {
 
         debug!(status = response.status().as_u16(), "Received response");
 
+        let status = response.status().as_u16();
+        if status == 400 {
+            return Err(EvaluationError {
+                code: EvaluationErrorCode::InvalidContext,
+                message: Some("Invalid context".to_string()),
+            });
+        }
+
+        if status == 401 || status == 403 {
+            return Err(EvaluationError {
+                code: EvaluationErrorCode::General(
+                    "authentication/authorization error".to_string(),
+                ),
+                message: Some("authentication/authorization error".to_string()),
+            });
+        }
+
+        if status == 404 {
+            return Err(EvaluationError {
+                code: EvaluationErrorCode::FlagNotFound,
+                message: Some(format!("Flag: {} not found", flag_key)),
+            });
+        }
+
         let result = response.json::<serde_json::Value>().await.map_err(|e| {
             error!(error = %e, "Failed to parse boolean response");
             EvaluationError {
@@ -207,6 +231,30 @@ impl FeatureProvider for RestResolver {
             })?;
 
         debug!(status = response.status().as_u16(), "Received response");
+
+        let status = response.status().as_u16();
+        if status == 400 {
+            return Err(EvaluationError {
+                code: EvaluationErrorCode::InvalidContext,
+                message: Some("Invalid context".to_string()),
+            });
+        }
+
+        if status == 401 || status == 403 {
+            return Err(EvaluationError {
+                code: EvaluationErrorCode::General(
+                    "authentication/authorization error".to_string(),
+                ),
+                message: Some("authentication/authorization error".to_string()),
+            });
+        }
+
+        if status == 404 {
+            return Err(EvaluationError {
+                code: EvaluationErrorCode::FlagNotFound,
+                message: Some(format!("Flag: {} not found", flag_key)),
+            });
+        }
 
         let result = response.json::<serde_json::Value>().await.map_err(|e| {
             error!(error = %e, "Failed to parse string response");
@@ -278,6 +326,30 @@ impl FeatureProvider for RestResolver {
 
         debug!(status = response.status().as_u16(), "Received response");
 
+        let status = response.status().as_u16();
+        if status == 400 {
+            return Err(EvaluationError {
+                code: EvaluationErrorCode::InvalidContext,
+                message: Some("Invalid context".to_string()),
+            });
+        }
+
+        if status == 401 || status == 403 {
+            return Err(EvaluationError {
+                code: EvaluationErrorCode::General(
+                    "authentication/authorization error".to_string(),
+                ),
+                message: Some("authentication/authorization error".to_string()),
+            });
+        }
+
+        if status == 404 {
+            return Err(EvaluationError {
+                code: EvaluationErrorCode::FlagNotFound,
+                message: Some(format!("Flag: {} not found", flag_key)),
+            });
+        }
+
         let result = response.json::<serde_json::Value>().await.map_err(|e| {
             error!(error = %e, "Failed to parse float response");
             EvaluationError {
@@ -346,6 +418,30 @@ impl FeatureProvider for RestResolver {
             })?;
 
         debug!(status = response.status().as_u16(), "Received response");
+
+        let status = response.status().as_u16();
+        if status == 400 {
+            return Err(EvaluationError {
+                code: EvaluationErrorCode::InvalidContext,
+                message: Some("Invalid context".to_string()),
+            });
+        }
+
+        if status == 401 || status == 403 {
+            return Err(EvaluationError {
+                code: EvaluationErrorCode::General(
+                    "authentication/authorization error".to_string(),
+                ),
+                message: Some("authentication/authorization error".to_string()),
+            });
+        }
+
+        if status == 404 {
+            return Err(EvaluationError {
+                code: EvaluationErrorCode::FlagNotFound,
+                message: Some(format!("Flag: {} not found", flag_key)),
+            });
+        }
 
         let result = response.json::<serde_json::Value>().await.map_err(|e| {
             error!(error = %e, "Failed to parse integer response");
@@ -416,6 +512,30 @@ impl FeatureProvider for RestResolver {
             })?;
 
         debug!(status = response.status().as_u16(), "Received response");
+
+        let status = response.status().as_u16();
+        if status == 400 {
+            return Err(EvaluationError {
+                code: EvaluationErrorCode::InvalidContext,
+                message: Some("Invalid context".to_string()),
+            });
+        }
+
+        if status == 401 || status == 403 {
+            return Err(EvaluationError {
+                code: EvaluationErrorCode::General(
+                    "authentication/authorization error".to_string(),
+                ),
+                message: Some("authentication/authorization error".to_string()),
+            });
+        }
+
+        if status == 404 {
+            return Err(EvaluationError {
+                code: EvaluationErrorCode::FlagNotFound,
+                message: Some(format!("Flag: {} not found", flag_key)),
+            });
+        }
 
         let result = response.json::<serde_json::Value>().await.map_err(|e| {
             error!(error = %e, "Failed to parse struct response");
