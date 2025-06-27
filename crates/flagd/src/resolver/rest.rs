@@ -809,20 +809,81 @@ mod tests {
     }
 
     #[test(tokio::test)]
-    async fn test_error_handling() {
+    async fn test_error_400() {
         let (mock_server, resolver) = setup_mock_server().await;
 
         Mock::given(method("POST"))
             .and(path("/ofrep/v1/evaluate/flags/test-flag"))
-            .respond_with(ResponseTemplate::new(404).set_body_json(json!({
-                "errorCode": "FLAG_NOT_FOUND",
-                "errorDetails": "Flag not found"
-            })))
+            .respond_with(ResponseTemplate::new(400).set_body_json(json!({})))
             .mount(&mock_server)
             .await;
 
         let context = EvaluationContext::default();
         let result = resolver.resolve_bool_value("test-flag", &context).await;
         assert!(result.is_err());
+
+        let err = result.unwrap_err();
+        assert_eq!(err.code, EvaluationErrorCode::InvalidContext);
+    }
+
+    #[test(tokio::test)]
+    async fn test_error_401() {
+        let (mock_server, resolver) = setup_mock_server().await;
+
+        Mock::given(method("POST"))
+            .and(path("/ofrep/v1/evaluate/flags/test-flag"))
+            .respond_with(ResponseTemplate::new(401).set_body_json(json!({})))
+            .mount(&mock_server)
+            .await;
+
+        let context = EvaluationContext::default();
+        let result = resolver.resolve_bool_value("test-flag", &context).await;
+        assert!(result.is_err());
+
+        let err = result.unwrap_err();
+        assert_eq!(
+            err.code,
+            EvaluationErrorCode::General("authentication/authorization error".to_string())
+        );
+    }
+
+    #[test(tokio::test)]
+    async fn test_error_403() {
+        let (mock_server, resolver) = setup_mock_server().await;
+
+        Mock::given(method("POST"))
+            .and(path("/ofrep/v1/evaluate/flags/test-flag"))
+            .respond_with(ResponseTemplate::new(403).set_body_json(json!({})))
+            .mount(&mock_server)
+            .await;
+
+        let context = EvaluationContext::default();
+        let result = resolver.resolve_bool_value("test-flag", &context).await;
+        assert!(result.is_err());
+
+        let err = result.unwrap_err();
+        assert_eq!(
+            err.code,
+            EvaluationErrorCode::General("authentication/authorization error".to_string())
+        );
+    }
+
+    #[test(tokio::test)]
+    async fn test_error_404() {
+        let (mock_server, resolver) = setup_mock_server().await;
+
+        Mock::given(method("POST"))
+            .and(path("/ofrep/v1/evaluate/flags/test-flag"))
+            .respond_with(ResponseTemplate::new(404).set_body_json(json!({})))
+            .mount(&mock_server)
+            .await;
+
+        let context = EvaluationContext::default();
+        let result = resolver.resolve_bool_value("test-flag", &context).await;
+        assert!(result.is_err());
+
+        let err = result.unwrap_err();
+        assert_eq!(err.code, EvaluationErrorCode::FlagNotFound);
+        assert_eq!(err.message.unwrap(), "Flag: test-flag not found");
     }
 }
