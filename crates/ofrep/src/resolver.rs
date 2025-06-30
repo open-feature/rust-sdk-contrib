@@ -6,7 +6,7 @@ use open_feature::{
 };
 use reqwest::Client;
 use reqwest::StatusCode;
-use serde_json;
+use std::any;
 use tracing::{debug, error, instrument};
 
 use crate::OfrepOptions;
@@ -30,6 +30,89 @@ impl Resolver {
                 .expect("Failed to build HTTP client"),
         }
     }
+
+    #[instrument(skip(self, evaluation_context), fields(flag_key = %flag_key))]
+    async fn resolve_value<T: std::fmt::Debug>(
+        &self,
+        flag_key: &str,
+        evaluation_context: &EvaluationContext,
+        convertor: fn(serde_json::Value) -> Option<T>,
+    ) -> EvaluationResult<ResolutionDetails<T>> {
+        debug!("Resolving {} flag", std::any::type_name::<T>());
+        let payload = serde_json::json!({
+            "context": context_to_json(evaluation_context)
+        });
+
+        let response = self
+            .client
+            .post(format!(
+                "{}/ofrep/v1/evaluate/flags/{}",
+                self.base_url, flag_key
+            ))
+            .header("Content-Type", "application/json")
+            .json(&payload)
+            .send()
+            .await
+            .map_err(|e| {
+                error!(error = %e, "Failed to parse response {} value", any::type_name::<T>());
+                EvaluationError {
+                    code: EvaluationErrorCode::General(format!(
+                        "Failed to resolve {} value ",
+                        std::any::type_name::<T>()
+                    )),
+                    message: Some(e.to_string()),
+                }
+            })?;
+
+        debug!(status = response.status().as_u16(), "Received response");
+
+        match response.status() {
+            StatusCode::BAD_REQUEST => {
+                return Err(EvaluationError {
+                    code: EvaluationErrorCode::InvalidContext,
+                    message: Some("Invalid context".to_string()),
+                });
+            }
+            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+                return Err(EvaluationError {
+                    code: EvaluationErrorCode::General(
+                        "authentication/authorization error".to_string(),
+                    ),
+                    message: Some("authentication/authorization error".to_string()),
+                });
+            }
+            StatusCode::NOT_FOUND => {
+                return Err(EvaluationError {
+                    code: EvaluationErrorCode::FlagNotFound,
+                    message: Some(format!("Flag: {flag_key} not found")),
+                });
+            }
+            _ => {
+                let result = response.json::<serde_json::Value>().await.map_err(|e| {
+                    error!(error = %e, "Failed to parse {} response", any::type_name::<T>());
+                    EvaluationError {
+                        code: EvaluationErrorCode::ParseError,
+                        message: Some(e.to_string()),
+                    }
+                })?;
+                let value = convertor(result["value"].clone()).ok_or_else(|| {
+                    error!("Invalid {} value in response", any::type_name::<T>());
+                    EvaluationError {
+                        code: EvaluationErrorCode::ParseError,
+                        message: Some(format!("Invalid value {}", std::any::type_name::<T>())),
+                    }
+                })?;
+
+                debug!(value = ?value, variant = ?result["variant"], "Flag evaluated");
+                Ok(ResolutionDetails {
+                    value,
+                    variant: result["variant"].as_str().map(String::from),
+                    reason: Some(open_feature::EvaluationReason::Static),
+                    flag_metadata: Default::default(),
+                })
+            }
+        }
+    }
 }
 
 #[async_trait]
@@ -38,87 +121,13 @@ impl FeatureProvider for Resolver {
         &self.metadata
     }
 
-    #[instrument(skip(self, evaluation_context), fields(flag_key = %flag_key))]
     async fn resolve_bool_value(
         &self,
         flag_key: &str,
         evaluation_context: &EvaluationContext,
     ) -> EvaluationResult<ResolutionDetails<bool>> {
-        debug!("Resolving boolean flag");
-
-        let payload = serde_json::json!({
-            "context": context_to_json(evaluation_context)
-        });
-
-        let response = self
-            .client
-            .post(format!(
-                "{}/ofrep/v1/evaluate/flags/{}",
-                self.base_url, flag_key
-            ))
-            .header("Content-Type", "application/json")
-            .json(&payload)
-            .send()
+        self.resolve_value(flag_key, evaluation_context, |value| value.as_bool())
             .await
-            .map_err(|e| {
-                error!(error = %e, "Failed to resolve boolean value");
-                EvaluationError {
-                    code: EvaluationErrorCode::General(
-                        "Failed to resolve boolean value".to_string(),
-                    ),
-                    message: Some(e.to_string()),
-                }
-            })?;
-
-        debug!(status = response.status().as_u16(), "Received response");
-
-        match response.status() {
-            StatusCode::BAD_REQUEST => {
-                return Err(EvaluationError {
-                    code: EvaluationErrorCode::InvalidContext,
-                    message: Some("Invalid context".to_string()),
-                });
-            }
-            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
-                return Err(EvaluationError {
-                    code: EvaluationErrorCode::General(
-                        "authentication/authorization error".to_string(),
-                    ),
-                    message: Some("authentication/authorization error".to_string()),
-                });
-            }
-            StatusCode::NOT_FOUND => {
-                return Err(EvaluationError {
-                    code: EvaluationErrorCode::FlagNotFound,
-                    message: Some(format!("Flag: {flag_key} not found")),
-                });
-            }
-            _ => {
-                let result = response.json::<serde_json::Value>().await.map_err(|e| {
-                    error!(error = %e, "Failed to parse boolean response");
-                    EvaluationError {
-                        code: EvaluationErrorCode::ParseError,
-                        message: Some(e.to_string()),
-                    }
-                })?;
-
-                let value = result["value"].as_bool().ok_or_else(|| {
-                    error!("Invalid boolean value in response");
-                    EvaluationError {
-                        code: EvaluationErrorCode::ParseError,
-                        message: Some("Invalid boolean value".to_string()),
-                    }
-                })?;
-
-                debug!(value = value, variant = ?result["variant"], "Flag evaluated");
-                Ok(ResolutionDetails {
-                    value,
-                    variant: result["variant"].as_str().map(String::from),
-                    reason: Some(open_feature::EvaluationReason::Static),
-                    flag_metadata: Default::default(),
-                })
-            }
-        }
     }
 
     async fn resolve_string_value(
@@ -126,84 +135,10 @@ impl FeatureProvider for Resolver {
         flag_key: &str,
         evaluation_context: &EvaluationContext,
     ) -> EvaluationResult<ResolutionDetails<String>> {
-        debug!("Resolving string flag");
-
-        let payload = serde_json::json!({
-            "context": context_to_json(evaluation_context)
-        });
-
-        let response = self
-            .client
-            .post(format!(
-                "{}/ofrep/v1/evaluate/flags/{}",
-                self.base_url, flag_key
-            ))
-            .header("Content-Type", "application/json")
-            .json(&payload)
-            .send()
-            .await
-            .map_err(|e| {
-                error!(error = %e, "Failed to resolve string value");
-                EvaluationError {
-                    code: EvaluationErrorCode::General(
-                        "Failed to resolve string value".to_string(),
-                    ),
-                    message: Some(e.to_string()),
-                }
-            })?;
-
-        debug!(status = response.status().as_u16(), "Received response");
-
-        match response.status() {
-            StatusCode::BAD_REQUEST => {
-                return Err(EvaluationError {
-                    code: EvaluationErrorCode::InvalidContext,
-                    message: Some("Invalid context".to_string()),
-                });
-            }
-            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
-                return Err(EvaluationError {
-                    code: EvaluationErrorCode::General(
-                        "authentication/authorization error".to_string(),
-                    ),
-                    message: Some("authentication/authorization error".to_string()),
-                });
-            }
-            StatusCode::NOT_FOUND => {
-                return Err(EvaluationError {
-                    code: EvaluationErrorCode::FlagNotFound,
-                    message: Some(format!("Flag: {flag_key} not found")),
-                });
-            }
-            _ => {
-                let result = response.json::<serde_json::Value>().await.map_err(|e| {
-                    error!(error = %e, "Failed to parse string response");
-                    EvaluationError {
-                        code: EvaluationErrorCode::ParseError,
-                        message: Some(e.to_string()),
-                    }
-                })?;
-
-                let value = result["value"]
-                    .as_str()
-                    .ok_or_else(|| {
-                        error!("Invalid string value in response");
-                        EvaluationError {
-                            code: EvaluationErrorCode::ParseError,
-                            message: Some("Invalid string value".to_string()),
-                        }
-                    })?
-                    .to_string();
-
-                debug!(value = %value, variant = ?result["variant"], "Flag evaluated");
-                Ok(ResolutionDetails {
-                    value,
-                    variant: result["variant"].as_str().map(String::from),
-                    reason: Some(open_feature::EvaluationReason::Static),
-                    flag_metadata: Default::default(),
-                })
-            }
-        }
+        self.resolve_value(flag_key, evaluation_context, |value| {
+            value.as_str().map(|s| s.to_string())
+        })
+        .await
     }
 
     async fn resolve_float_value(
@@ -211,79 +146,8 @@ impl FeatureProvider for Resolver {
         flag_key: &str,
         evaluation_context: &EvaluationContext,
     ) -> EvaluationResult<ResolutionDetails<f64>> {
-        debug!("Resolving float flag");
-
-        let payload = serde_json::json!({
-            "context": context_to_json(evaluation_context)
-        });
-
-        let response = self
-            .client
-            .post(format!(
-                "{}/ofrep/v1/evaluate/flags/{}",
-                self.base_url, flag_key
-            ))
-            .header("Content-Type", "application/json")
-            .json(&payload)
-            .send()
+        self.resolve_value(flag_key, evaluation_context, |value| value.as_f64())
             .await
-            .map_err(|e| {
-                error!(error = %e, "Failed to resolve float value");
-                EvaluationError {
-                    code: EvaluationErrorCode::General("Failed to resolve float value".to_string()),
-                    message: Some(e.to_string()),
-                }
-            })?;
-
-        debug!(status = response.status().as_u16(), "Received response");
-
-        match response.status() {
-            StatusCode::BAD_REQUEST => {
-                return Err(EvaluationError {
-                    code: EvaluationErrorCode::InvalidContext,
-                    message: Some("Invalid context".to_string()),
-                });
-            }
-            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
-                return Err(EvaluationError {
-                    code: EvaluationErrorCode::General(
-                        "authentication/authorization error".to_string(),
-                    ),
-                    message: Some("authentication/authorization error".to_string()),
-                });
-            }
-            StatusCode::NOT_FOUND => {
-                return Err(EvaluationError {
-                    code: EvaluationErrorCode::FlagNotFound,
-                    message: Some(format!("Flag: {flag_key} not found")),
-                });
-            }
-            _ => {
-                let result = response.json::<serde_json::Value>().await.map_err(|e| {
-                    error!(error = %e, "Failed to parse float response");
-                    EvaluationError {
-                        code: EvaluationErrorCode::ParseError,
-                        message: Some(e.to_string()),
-                    }
-                })?;
-
-                let value = result["value"].as_f64().ok_or_else(|| {
-                    error!("Invalid float value in response");
-                    EvaluationError {
-                        code: EvaluationErrorCode::ParseError,
-                        message: Some("Invalid float value".to_string()),
-                    }
-                })?;
-
-                debug!(value = value, variant = ?result["variant"], "Flag evaluated");
-                Ok(ResolutionDetails {
-                    value,
-                    variant: result["variant"].as_str().map(String::from),
-                    reason: Some(open_feature::EvaluationReason::Static),
-                    flag_metadata: Default::default(),
-                })
-            }
-        }
     }
 
     async fn resolve_int_value(
@@ -291,81 +155,8 @@ impl FeatureProvider for Resolver {
         flag_key: &str,
         evaluation_context: &EvaluationContext,
     ) -> EvaluationResult<ResolutionDetails<i64>> {
-        debug!("Resolving integer flag");
-
-        let payload = serde_json::json!({
-            "context": context_to_json(evaluation_context)
-        });
-
-        let response = self
-            .client
-            .post(format!(
-                "{}/ofrep/v1/evaluate/flags/{}",
-                self.base_url, flag_key
-            ))
-            .header("Content-Type", "application/json")
-            .json(&payload)
-            .send()
+        self.resolve_value(flag_key, evaluation_context, |value| value.as_i64())
             .await
-            .map_err(|e| {
-                error!(error = %e, "Failed to resolve integer value");
-                EvaluationError {
-                    code: EvaluationErrorCode::General(
-                        "Failed to resolve integer value".to_string(),
-                    ),
-                    message: Some(e.to_string()),
-                }
-            })?;
-
-        debug!(status = response.status().as_u16(), "Received response");
-
-        match response.status() {
-            StatusCode::BAD_REQUEST => {
-                return Err(EvaluationError {
-                    code: EvaluationErrorCode::InvalidContext,
-                    message: Some("Invalid context".to_string()),
-                });
-            }
-            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
-                return Err(EvaluationError {
-                    code: EvaluationErrorCode::General(
-                        "authentication/authorization error".to_string(),
-                    ),
-                    message: Some("authentication/authorization error".to_string()),
-                });
-            }
-            StatusCode::NOT_FOUND => {
-                return Err(EvaluationError {
-                    code: EvaluationErrorCode::FlagNotFound,
-                    message: Some(format!("Flag: {flag_key} not found")),
-                });
-            }
-            _ => {
-                let result = response.json::<serde_json::Value>().await.map_err(|e| {
-                    error!(error = %e, "Failed to parse integer response");
-                    EvaluationError {
-                        code: EvaluationErrorCode::ParseError,
-                        message: Some(e.to_string()),
-                    }
-                })?;
-
-                let value = result["value"].as_i64().ok_or_else(|| {
-                    error!("Invalid integer value in response");
-                    EvaluationError {
-                        code: EvaluationErrorCode::ParseError,
-                        message: Some("Invalid integer value".to_string()),
-                    }
-                })?;
-
-                debug!(value = value, variant = ?result["variant"], "Flag evaluated");
-                Ok(ResolutionDetails {
-                    value,
-                    variant: result["variant"].as_str().map(String::from),
-                    reason: Some(open_feature::EvaluationReason::Static),
-                    flag_metadata: Default::default(),
-                })
-            }
-        }
     }
 
     async fn resolve_struct_value(
@@ -373,86 +164,10 @@ impl FeatureProvider for Resolver {
         flag_key: &str,
         evaluation_context: &EvaluationContext,
     ) -> EvaluationResult<ResolutionDetails<StructValue>> {
-        debug!("Resolving struct flag");
-
-        let payload = serde_json::json!({
-            "context": context_to_json(evaluation_context)
-        });
-
-        let response = self
-            .client
-            .post(format!(
-                "{}/ofrep/v1/evaluate/flags/{}",
-                self.base_url, flag_key
-            ))
-            .header("Content-Type", "application/json")
-            .json(&payload)
-            .send()
-            .await
-            .map_err(|e| {
-                error!(error = %e, "Failed to resolve struct value");
-                EvaluationError {
-                    code: EvaluationErrorCode::General(
-                        "Failed to resolve struct value".to_string(),
-                    ),
-                    message: Some(e.to_string()),
-                }
-            })?;
-
-        debug!(status = response.status().as_u16(), "Received response");
-
-        match response.status() {
-            StatusCode::BAD_REQUEST => {
-                return Err(EvaluationError {
-                    code: EvaluationErrorCode::InvalidContext,
-                    message: Some("Invalid context".to_string()),
-                });
-            }
-            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
-                return Err(EvaluationError {
-                    code: EvaluationErrorCode::General(
-                        "authentication/authorization error".to_string(),
-                    ),
-                    message: Some("authentication/authorization error".to_string()),
-                });
-            }
-            StatusCode::NOT_FOUND => {
-                return Err(EvaluationError {
-                    code: EvaluationErrorCode::FlagNotFound,
-                    message: Some(format!("Flag: {flag_key} not found")),
-                });
-            }
-            _ => {
-                let result = response.json::<serde_json::Value>().await.map_err(|e| {
-                    error!(error = %e, "Failed to parse struct response");
-                    EvaluationError {
-                        code: EvaluationErrorCode::ParseError,
-                        message: Some(e.to_string()),
-                    }
-                })?;
-
-                let value = result["value"]
-                    .clone()
-                    .into_feature_value()
-                    .as_struct()
-                    .ok_or_else(|| {
-                        error!("Invalid struct value in response");
-                        EvaluationError {
-                            code: EvaluationErrorCode::ParseError,
-                            message: Some("Invalid struct value".to_string()),
-                        }
-                    })?
-                    .clone();
-
-                debug!(variant = ?result["variant"], "Flag evaluated");
-                Ok(ResolutionDetails {
-                    value,
-                    variant: result["variant"].as_str().map(String::from),
-                    reason: Some(open_feature::EvaluationReason::Static),
-                    flag_metadata: Default::default(),
-                })
-            }
-        }
+        self.resolve_value(flag_key, evaluation_context, |value| {
+            value.into_feature_value().as_struct().cloned()
+        })
+        .await
     }
 }
 
@@ -479,7 +194,7 @@ fn context_to_json(context: &EvaluationContext) -> serde_json::Value {
                 }
             }
             EvaluationContextFieldValue::DateTime(dt) => serde_json::Value::String(dt.to_string()),
-            EvaluationContextFieldValue::Struct(s) => serde_json::Value::String(format!("{:?}", s)),
+            EvaluationContextFieldValue::Struct(s) => serde_json::Value::String(format!("{s:?}")),
         };
         fields.insert(key.clone(), json_value);
     }

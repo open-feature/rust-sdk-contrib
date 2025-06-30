@@ -58,8 +58,7 @@ impl FeatureProvider for OfrepProvider {
         flag_key: &str,
         context: &EvaluationContext,
     ) -> Result<ResolutionDetails<bool>, EvaluationError> {
-        let result = self.provider.resolve_bool_value(flag_key, context).await?;
-        Ok(result)
+        self.provider.resolve_bool_value(flag_key, context).await
     }
 
     async fn resolve_int_value(
@@ -67,8 +66,7 @@ impl FeatureProvider for OfrepProvider {
         flag_key: &str,
         context: &EvaluationContext,
     ) -> Result<ResolutionDetails<i64>, EvaluationError> {
-        let result = self.provider.resolve_int_value(flag_key, context).await?;
-        Ok(result)
+        self.provider.resolve_int_value(flag_key, context).await
     }
 
     async fn resolve_float_value(
@@ -76,8 +74,7 @@ impl FeatureProvider for OfrepProvider {
         flag_key: &str,
         context: &EvaluationContext,
     ) -> Result<ResolutionDetails<f64>, EvaluationError> {
-        let result = self.provider.resolve_float_value(flag_key, context).await?;
-        Ok(result)
+        self.provider.resolve_float_value(flag_key, context).await
     }
 
     async fn resolve_string_value(
@@ -85,11 +82,7 @@ impl FeatureProvider for OfrepProvider {
         flag_key: &str,
         context: &EvaluationContext,
     ) -> Result<ResolutionDetails<String>, EvaluationError> {
-        let result = self
-            .provider
-            .resolve_string_value(flag_key, context)
-            .await?;
-        Ok(result)
+        self.provider.resolve_string_value(flag_key, context).await
     }
 
     async fn resolve_struct_value(
@@ -97,10 +90,6 @@ impl FeatureProvider for OfrepProvider {
         flag_key: &str,
         context: &EvaluationContext,
     ) -> Result<ResolutionDetails<StructValue>, EvaluationError> {
-        let result = self
-            .provider
-            .resolve_struct_value(flag_key, context)
-            .await?;
-        Ok(result)
+        self.provider.resolve_struct_value(flag_key, context).await
     }
 }
