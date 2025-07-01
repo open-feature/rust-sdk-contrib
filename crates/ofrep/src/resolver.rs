@@ -1,4 +1,6 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Duration, Utc};
+use once_cell::sync::Lazy;
 use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
 use open_feature::{
     EvaluationContext, EvaluationContextFieldValue, EvaluationError, EvaluationErrorCode,
@@ -6,10 +8,14 @@ use open_feature::{
 };
 use reqwest::Client;
 use reqwest::StatusCode;
+use reqwest::header::RETRY_AFTER;
 use std::any;
+use tokio::sync::Mutex;
 use tracing::{debug, error, instrument};
 
 use crate::OfrepOptions;
+
+static CURRENT_RETRY_AFTER: Lazy<Mutex<DateTime<Utc>>> = Lazy::new(|| Mutex::new(Utc::now()));
 
 #[derive(Debug)]
 pub struct Resolver {
@@ -31,6 +37,35 @@ impl Resolver {
         }
     }
 
+    async fn parse_retry_after(retry_after: &str) -> DateTime<Utc> {
+        let now = Utc::now();
+
+        if retry_after.trim().is_empty() {
+            return now;
+        }
+
+        if let Ok(seconds) = retry_after.trim().parse::<i64>() {
+            return now + Duration::seconds(seconds);
+        }
+
+        if let Ok(parsed_date) = retry_after.trim().parse::<DateTime<Utc>>() {
+            return parsed_date.with_timezone(&Utc);
+        }
+
+        debug!("Failed to parse Retry-After header : {}", retry_after);
+        now
+    }
+
+    async fn update_retry_after(new_retry_after: DateTime<Utc>) {
+        let mut retry_after = CURRENT_RETRY_AFTER.lock().await;
+        *retry_after = new_retry_after;
+    }
+
+    async fn is_rate_limit_exceeded() -> bool {
+        let retry_after = CURRENT_RETRY_AFTER.lock().await;
+        Utc::now() < *retry_after
+    }
+
     #[instrument(skip(self, evaluation_context), fields(flag_key = %flag_key))]
     async fn resolve_value<T: std::fmt::Debug>(
         &self,
@@ -38,6 +73,15 @@ impl Resolver {
         evaluation_context: &EvaluationContext,
         convertor: fn(serde_json::Value) -> Option<T>,
     ) -> EvaluationResult<ResolutionDetails<T>> {
+        if Resolver::is_rate_limit_exceeded().await {
+            return Err(EvaluationError {
+                code: EvaluationErrorCode::General("Rate limit exceeded".to_string()),
+                message: Some(
+                    "Rate limit exceeded. Please wait before making another request.".to_string(),
+                ),
+            });
+        }
+
         debug!("Resolving {} flag", std::any::type_name::<T>());
         let payload = serde_json::json!({
             "context": context_to_json(evaluation_context)
@@ -85,6 +129,28 @@ impl Resolver {
                 return Err(EvaluationError {
                     code: EvaluationErrorCode::FlagNotFound,
                     message: Some(format!("Flag: {flag_key} not found")),
+                });
+            }
+            StatusCode::TOO_MANY_REQUESTS => {
+                let header_retry_after: Option<&str> = response
+                    .headers()
+                    .get(RETRY_AFTER)
+                    .and_then(|value| value.to_str().ok());
+
+                if let Some(header_retry_after) = header_retry_after {
+                    let new_retry_after: DateTime<Utc> =
+                        Resolver::parse_retry_after(header_retry_after).await;
+                    Resolver::update_retry_after(new_retry_after).await;
+                } else {
+                    debug!("Couldn't parse the retry-after header.");
+                    let mut retry_after = CURRENT_RETRY_AFTER.lock().await;
+                    *retry_after = Utc::now();
+                }
+
+                let retry_after = CURRENT_RETRY_AFTER.lock().await;
+                return Err(EvaluationError {
+                    code: EvaluationErrorCode::General("Rate limit exceeded".to_string()),
+                    message: Some(format!("Rate limit exceeded. Retry after {}", *retry_after)),
                 });
             }
             _ => {
@@ -242,8 +308,14 @@ mod tests {
     use super::*;
     use serde_json::json;
     use test_log::test;
+    use tokio::time::{Duration, sleep};
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    async fn reset_states() {
+        let mut retry_after = CURRENT_RETRY_AFTER.lock().await;
+        *retry_after = Utc::now();
+    }
 
     async fn setup_mock_server() -> (MockServer, Resolver) {
         let mock_server = MockServer::start().await;
@@ -256,7 +328,9 @@ mod tests {
     }
 
     #[test(tokio::test)]
+    #[serial_test::serial]
     async fn test_resolve_bool_value() {
+        reset_states().await;
         let (mock_server, resolver) = setup_mock_server().await;
 
         Mock::given(method("POST"))
@@ -281,7 +355,9 @@ mod tests {
     }
 
     #[test(tokio::test)]
+    #[serial_test::serial]
     async fn test_resolve_string_value() {
+        reset_states().await;
         let (mock_server, resolver) = setup_mock_server().await;
 
         Mock::given(method("POST"))
@@ -306,7 +382,9 @@ mod tests {
     }
 
     #[test(tokio::test)]
+    #[serial_test::serial]
     async fn test_resolve_float_value() {
+        reset_states().await;
         let (mock_server, resolver) = setup_mock_server().await;
 
         Mock::given(method("POST"))
@@ -331,7 +409,9 @@ mod tests {
     }
 
     #[test(tokio::test)]
+    #[serial_test::serial]
     async fn test_resolve_int_value() {
+        reset_states().await;
         let (mock_server, resolver) = setup_mock_server().await;
 
         Mock::given(method("POST"))
@@ -356,7 +436,9 @@ mod tests {
     }
 
     #[test(tokio::test)]
+    #[serial_test::serial]
     async fn test_resolve_struct_value() {
+        reset_states().await;
         let (mock_server, resolver) = setup_mock_server().await;
 
         Mock::given(method("POST"))
@@ -401,7 +483,9 @@ mod tests {
     }
 
     #[test(tokio::test)]
+    #[serial_test::serial]
     async fn test_error_400() {
+        reset_states().await;
         let (mock_server, resolver) = setup_mock_server().await;
 
         Mock::given(method("POST"))
@@ -446,7 +530,9 @@ mod tests {
     }
 
     #[test(tokio::test)]
+    #[serial_test::serial]
     async fn test_error_401() {
+        reset_states().await;
         let (mock_server, resolver) = setup_mock_server().await;
 
         Mock::given(method("POST"))
@@ -492,7 +578,9 @@ mod tests {
     }
 
     #[test(tokio::test)]
+    #[serial_test::serial]
     async fn test_error_403() {
+        reset_states().await;
         let (mock_server, resolver) = setup_mock_server().await;
 
         Mock::given(method("POST"))
@@ -538,7 +626,9 @@ mod tests {
     }
 
     #[test(tokio::test)]
+    #[serial_test::serial]
     async fn test_error_404() {
+        reset_states().await;
         let (mock_server, resolver) = setup_mock_server().await;
 
         Mock::given(method("POST"))
@@ -594,6 +684,69 @@ mod tests {
         assert_eq!(
             result_struct_error.message.unwrap(),
             "Flag: test-flag not found"
+        );
+    }
+
+    #[test(tokio::test)]
+    #[serial_test::serial]
+    async fn test_error_429() {
+        reset_states().await;
+        let (mock_server, resolver) = setup_mock_server().await;
+
+        Mock::given(method("POST"))
+            .and(path("/ofrep/v1/evaluate/flags/test-flag"))
+            .respond_with(
+                ResponseTemplate::new(429)
+                    .insert_header("Retry-After", "3")
+                    .set_body_json(json!({})),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let context = EvaluationContext::default();
+
+        let result_bool = resolver.resolve_bool_value("test-flag", &context).await;
+        let result_bool_2 = resolver.resolve_bool_value("test-flag", &context).await;
+
+        assert!(result_bool.is_err());
+        let result_bool_error = result_bool.unwrap_err();
+        assert_eq!(
+            result_bool_error.code,
+            EvaluationErrorCode::General("Rate limit exceeded".to_string())
+        );
+        assert!(
+            result_bool_error
+                .message
+                .unwrap()
+                .starts_with("Rate limit exceeded. Retry after")
+        );
+
+        assert!(result_bool_2.is_err());
+        let result_bool_error_2 = result_bool_2.unwrap_err();
+        assert_eq!(
+            result_bool_error_2.code,
+            EvaluationErrorCode::General("Rate limit exceeded".to_string())
+        );
+        assert_eq!(
+            result_bool_error_2.message.unwrap(),
+            "Rate limit exceeded. Please wait before making another request."
+        );
+
+        sleep(Duration::from_secs(3)).await;
+
+        let result_bool_3 = resolver.resolve_bool_value("test-flag", &context).await;
+        assert!(result_bool_3.is_err());
+
+        let result_bool_error_3 = result_bool_3.unwrap_err();
+        assert_eq!(
+            result_bool_error_3.code,
+            EvaluationErrorCode::General("Rate limit exceeded".to_string())
+        );
+        assert!(
+            result_bool_error_3
+                .message
+                .unwrap()
+                .starts_with("Rate limit exceeded. Retry after")
         );
     }
 }
