@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq)]
 pub enum OfrepError {
     #[error("Provider error: {0}")]
     Provider(String),
