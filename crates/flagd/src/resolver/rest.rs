@@ -49,6 +49,7 @@ use open_feature::{
     EvaluationResult, StructValue, Value,
 };
 use reqwest::Client;
+use reqwest::StatusCode;
 use serde_json;
 use tracing::{debug, error, instrument};
 
@@ -139,29 +140,53 @@ impl FeatureProvider for RestResolver {
 
         debug!(status = response.status().as_u16(), "Received response");
 
-        let result = response.json::<serde_json::Value>().await.map_err(|e| {
-            error!(error = %e, "Failed to parse boolean response");
-            EvaluationError {
-                code: EvaluationErrorCode::ParseError,
-                message: Some(e.to_string()),
+        match response.status() {
+            StatusCode::BAD_REQUEST => {
+                return Err(EvaluationError {
+                    code: EvaluationErrorCode::InvalidContext,
+                    message: Some("Invalid context".to_string()),
+                });
             }
-        })?;
-
-        let value = result["value"].as_bool().ok_or_else(|| {
-            error!("Invalid boolean value in response");
-            EvaluationError {
-                code: EvaluationErrorCode::ParseError,
-                message: Some("Invalid boolean value".to_string()),
+            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+                return Err(EvaluationError {
+                    code: EvaluationErrorCode::General(
+                        "authentication/authorization error".to_string(),
+                    ),
+                    message: Some("authentication/authorization error".to_string()),
+                });
             }
-        })?;
+            StatusCode::NOT_FOUND => {
+                return Err(EvaluationError {
+                    code: EvaluationErrorCode::FlagNotFound,
+                    message: Some(format!("Flag: {flag_key} not found")),
+                });
+            }
+            _ => {
+                let result = response.json::<serde_json::Value>().await.map_err(|e| {
+                    error!(error = %e, "Failed to parse boolean response");
+                    EvaluationError {
+                        code: EvaluationErrorCode::ParseError,
+                        message: Some(e.to_string()),
+                    }
+                })?;
 
-        debug!(value = value, variant = ?result["variant"], "Flag evaluated");
-        Ok(ResolutionDetails {
-            value,
-            variant: result["variant"].as_str().map(String::from),
-            reason: Some(open_feature::EvaluationReason::Static),
-            flag_metadata: Default::default(),
-        })
+                let value = result["value"].as_bool().ok_or_else(|| {
+                    error!("Invalid boolean value in response");
+                    EvaluationError {
+                        code: EvaluationErrorCode::ParseError,
+                        message: Some("Invalid boolean value".to_string()),
+                    }
+                })?;
+
+                debug!(value = value, variant = ?result["variant"], "Flag evaluated");
+                Ok(ResolutionDetails {
+                    value,
+                    variant: result["variant"].as_str().map(String::from),
+                    reason: Some(open_feature::EvaluationReason::Static),
+                    flag_metadata: Default::default(),
+                })
+            }
+        }
     }
 
     /// Resolves a string flag value
@@ -208,32 +233,56 @@ impl FeatureProvider for RestResolver {
 
         debug!(status = response.status().as_u16(), "Received response");
 
-        let result = response.json::<serde_json::Value>().await.map_err(|e| {
-            error!(error = %e, "Failed to parse string response");
-            EvaluationError {
-                code: EvaluationErrorCode::ParseError,
-                message: Some(e.to_string()),
+        match response.status() {
+            StatusCode::BAD_REQUEST => {
+                return Err(EvaluationError {
+                    code: EvaluationErrorCode::InvalidContext,
+                    message: Some("Invalid context".to_string()),
+                });
             }
-        })?;
+            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+                return Err(EvaluationError {
+                    code: EvaluationErrorCode::General(
+                        "authentication/authorization error".to_string(),
+                    ),
+                    message: Some("authentication/authorization error".to_string()),
+                });
+            }
+            StatusCode::NOT_FOUND => {
+                return Err(EvaluationError {
+                    code: EvaluationErrorCode::FlagNotFound,
+                    message: Some(format!("Flag: {flag_key} not found")),
+                });
+            }
+            _ => {
+                let result = response.json::<serde_json::Value>().await.map_err(|e| {
+                    error!(error = %e, "Failed to parse string response");
+                    EvaluationError {
+                        code: EvaluationErrorCode::ParseError,
+                        message: Some(e.to_string()),
+                    }
+                })?;
 
-        let value = result["value"]
-            .as_str()
-            .ok_or_else(|| {
-                error!("Invalid string value in response");
-                EvaluationError {
-                    code: EvaluationErrorCode::ParseError,
-                    message: Some("Invalid string value".to_string()),
-                }
-            })?
-            .to_string();
+                let value = result["value"]
+                    .as_str()
+                    .ok_or_else(|| {
+                        error!("Invalid string value in response");
+                        EvaluationError {
+                            code: EvaluationErrorCode::ParseError,
+                            message: Some("Invalid string value".to_string()),
+                        }
+                    })?
+                    .to_string();
 
-        debug!(value = %value, variant = ?result["variant"], "Flag evaluated");
-        Ok(ResolutionDetails {
-            value,
-            variant: result["variant"].as_str().map(String::from),
-            reason: Some(open_feature::EvaluationReason::Static),
-            flag_metadata: Default::default(),
-        })
+                debug!(value = %value, variant = ?result["variant"], "Flag evaluated");
+                Ok(ResolutionDetails {
+                    value,
+                    variant: result["variant"].as_str().map(String::from),
+                    reason: Some(open_feature::EvaluationReason::Static),
+                    flag_metadata: Default::default(),
+                })
+            }
+        }
     }
 
     /// Resolves a float flag value
@@ -278,29 +327,53 @@ impl FeatureProvider for RestResolver {
 
         debug!(status = response.status().as_u16(), "Received response");
 
-        let result = response.json::<serde_json::Value>().await.map_err(|e| {
-            error!(error = %e, "Failed to parse float response");
-            EvaluationError {
-                code: EvaluationErrorCode::ParseError,
-                message: Some(e.to_string()),
+        match response.status() {
+            StatusCode::BAD_REQUEST => {
+                return Err(EvaluationError {
+                    code: EvaluationErrorCode::InvalidContext,
+                    message: Some("Invalid context".to_string()),
+                });
             }
-        })?;
-
-        let value = result["value"].as_f64().ok_or_else(|| {
-            error!("Invalid float value in response");
-            EvaluationError {
-                code: EvaluationErrorCode::ParseError,
-                message: Some("Invalid float value".to_string()),
+            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+                return Err(EvaluationError {
+                    code: EvaluationErrorCode::General(
+                        "authentication/authorization error".to_string(),
+                    ),
+                    message: Some("authentication/authorization error".to_string()),
+                });
             }
-        })?;
+            StatusCode::NOT_FOUND => {
+                return Err(EvaluationError {
+                    code: EvaluationErrorCode::FlagNotFound,
+                    message: Some(format!("Flag: {flag_key} not found")),
+                });
+            }
+            _ => {
+                let result = response.json::<serde_json::Value>().await.map_err(|e| {
+                    error!(error = %e, "Failed to parse float response");
+                    EvaluationError {
+                        code: EvaluationErrorCode::ParseError,
+                        message: Some(e.to_string()),
+                    }
+                })?;
 
-        debug!(value = value, variant = ?result["variant"], "Flag evaluated");
-        Ok(ResolutionDetails {
-            value,
-            variant: result["variant"].as_str().map(String::from),
-            reason: Some(open_feature::EvaluationReason::Static),
-            flag_metadata: Default::default(),
-        })
+                let value = result["value"].as_f64().ok_or_else(|| {
+                    error!("Invalid float value in response");
+                    EvaluationError {
+                        code: EvaluationErrorCode::ParseError,
+                        message: Some("Invalid float value".to_string()),
+                    }
+                })?;
+
+                debug!(value = value, variant = ?result["variant"], "Flag evaluated");
+                Ok(ResolutionDetails {
+                    value,
+                    variant: result["variant"].as_str().map(String::from),
+                    reason: Some(open_feature::EvaluationReason::Static),
+                    flag_metadata: Default::default(),
+                })
+            }
+        }
     }
 
     /// Resolves an integer flag value
@@ -347,29 +420,53 @@ impl FeatureProvider for RestResolver {
 
         debug!(status = response.status().as_u16(), "Received response");
 
-        let result = response.json::<serde_json::Value>().await.map_err(|e| {
-            error!(error = %e, "Failed to parse integer response");
-            EvaluationError {
-                code: EvaluationErrorCode::ParseError,
-                message: Some(e.to_string()),
+        match response.status() {
+            StatusCode::BAD_REQUEST => {
+                return Err(EvaluationError {
+                    code: EvaluationErrorCode::InvalidContext,
+                    message: Some("Invalid context".to_string()),
+                });
             }
-        })?;
-
-        let value = result["value"].as_i64().ok_or_else(|| {
-            error!("Invalid integer value in response");
-            EvaluationError {
-                code: EvaluationErrorCode::ParseError,
-                message: Some("Invalid integer value".to_string()),
+            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+                return Err(EvaluationError {
+                    code: EvaluationErrorCode::General(
+                        "authentication/authorization error".to_string(),
+                    ),
+                    message: Some("authentication/authorization error".to_string()),
+                });
             }
-        })?;
+            StatusCode::NOT_FOUND => {
+                return Err(EvaluationError {
+                    code: EvaluationErrorCode::FlagNotFound,
+                    message: Some(format!("Flag: {flag_key} not found")),
+                });
+            }
+            _ => {
+                let result = response.json::<serde_json::Value>().await.map_err(|e| {
+                    error!(error = %e, "Failed to parse integer response");
+                    EvaluationError {
+                        code: EvaluationErrorCode::ParseError,
+                        message: Some(e.to_string()),
+                    }
+                })?;
 
-        debug!(value = value, variant = ?result["variant"], "Flag evaluated");
-        Ok(ResolutionDetails {
-            value,
-            variant: result["variant"].as_str().map(String::from),
-            reason: Some(open_feature::EvaluationReason::Static),
-            flag_metadata: Default::default(),
-        })
+                let value = result["value"].as_i64().ok_or_else(|| {
+                    error!("Invalid integer value in response");
+                    EvaluationError {
+                        code: EvaluationErrorCode::ParseError,
+                        message: Some("Invalid integer value".to_string()),
+                    }
+                })?;
+
+                debug!(value = value, variant = ?result["variant"], "Flag evaluated");
+                Ok(ResolutionDetails {
+                    value,
+                    variant: result["variant"].as_str().map(String::from),
+                    reason: Some(open_feature::EvaluationReason::Static),
+                    flag_metadata: Default::default(),
+                })
+            }
+        }
     }
 
     /// Resolves a structured flag value
@@ -417,34 +514,58 @@ impl FeatureProvider for RestResolver {
 
         debug!(status = response.status().as_u16(), "Received response");
 
-        let result = response.json::<serde_json::Value>().await.map_err(|e| {
-            error!(error = %e, "Failed to parse struct response");
-            EvaluationError {
-                code: EvaluationErrorCode::ParseError,
-                message: Some(e.to_string()),
+        match response.status() {
+            StatusCode::BAD_REQUEST => {
+                return Err(EvaluationError {
+                    code: EvaluationErrorCode::InvalidContext,
+                    message: Some("Invalid context".to_string()),
+                });
             }
-        })?;
+            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+                return Err(EvaluationError {
+                    code: EvaluationErrorCode::General(
+                        "authentication/authorization error".to_string(),
+                    ),
+                    message: Some("authentication/authorization error".to_string()),
+                });
+            }
+            StatusCode::NOT_FOUND => {
+                return Err(EvaluationError {
+                    code: EvaluationErrorCode::FlagNotFound,
+                    message: Some(format!("Flag: {flag_key} not found")),
+                });
+            }
+            _ => {
+                let result = response.json::<serde_json::Value>().await.map_err(|e| {
+                    error!(error = %e, "Failed to parse struct response");
+                    EvaluationError {
+                        code: EvaluationErrorCode::ParseError,
+                        message: Some(e.to_string()),
+                    }
+                })?;
 
-        let value = result["value"]
-            .clone()
-            .into_feature_value()
-            .as_struct()
-            .ok_or_else(|| {
-                error!("Invalid struct value in response");
-                EvaluationError {
-                    code: EvaluationErrorCode::ParseError,
-                    message: Some("Invalid struct value".to_string()),
-                }
-            })?
-            .clone();
+                let value = result["value"]
+                    .clone()
+                    .into_feature_value()
+                    .as_struct()
+                    .ok_or_else(|| {
+                        error!("Invalid struct value in response");
+                        EvaluationError {
+                            code: EvaluationErrorCode::ParseError,
+                            message: Some("Invalid struct value".to_string()),
+                        }
+                    })?
+                    .clone();
 
-        debug!(variant = ?result["variant"], "Flag evaluated");
-        Ok(ResolutionDetails {
-            value,
-            variant: result["variant"].as_str().map(String::from),
-            reason: Some(open_feature::EvaluationReason::Static),
-            flag_metadata: Default::default(),
-        })
+                debug!(variant = ?result["variant"], "Flag evaluated");
+                Ok(ResolutionDetails {
+                    value,
+                    variant: result["variant"].as_str().map(String::from),
+                    reason: Some(open_feature::EvaluationReason::Static),
+                    flag_metadata: Default::default(),
+                })
+            }
+        }
     }
 }
 
@@ -689,20 +810,199 @@ mod tests {
     }
 
     #[test(tokio::test)]
-    async fn test_error_handling() {
+    async fn test_error_400() {
         let (mock_server, resolver) = setup_mock_server().await;
 
         Mock::given(method("POST"))
             .and(path("/ofrep/v1/evaluate/flags/test-flag"))
-            .respond_with(ResponseTemplate::new(404).set_body_json(json!({
-                "errorCode": "FLAG_NOT_FOUND",
-                "errorDetails": "Flag not found"
-            })))
+            .respond_with(ResponseTemplate::new(400).set_body_json(json!({})))
             .mount(&mock_server)
             .await;
 
         let context = EvaluationContext::default();
-        let result = resolver.resolve_bool_value("test-flag", &context).await;
-        assert!(result.is_err());
+        let result_bool = resolver.resolve_bool_value("test-flag", &context).await;
+        let result_int = resolver.resolve_int_value("test-flag", &context).await;
+        let result_float = resolver.resolve_float_value("test-flag", &context).await;
+        let result_string = resolver.resolve_string_value("test-flag", &context).await;
+        let result_struct = resolver.resolve_struct_value("test-flag", &context).await;
+
+        assert!(result_bool.is_err());
+        assert!(result_int.is_err());
+        assert!(result_float.is_err());
+        assert!(result_string.is_err());
+        assert!(result_struct.is_err());
+
+        assert_eq!(
+            result_bool.unwrap_err().code,
+            EvaluationErrorCode::InvalidContext
+        );
+        assert_eq!(
+            result_int.unwrap_err().code,
+            EvaluationErrorCode::InvalidContext
+        );
+        assert_eq!(
+            result_float.unwrap_err().code,
+            EvaluationErrorCode::InvalidContext
+        );
+        assert_eq!(
+            result_string.unwrap_err().code,
+            EvaluationErrorCode::InvalidContext
+        );
+        assert_eq!(
+            result_struct.unwrap_err().code,
+            EvaluationErrorCode::InvalidContext
+        );
+    }
+
+    #[test(tokio::test)]
+    async fn test_error_401() {
+        let (mock_server, resolver) = setup_mock_server().await;
+
+        Mock::given(method("POST"))
+            .and(path("/ofrep/v1/evaluate/flags/test-flag"))
+            .respond_with(ResponseTemplate::new(401).set_body_json(json!({})))
+            .mount(&mock_server)
+            .await;
+
+        let context = EvaluationContext::default();
+
+        let result_bool = resolver.resolve_bool_value("test-flag", &context).await;
+        let result_int = resolver.resolve_int_value("test-flag", &context).await;
+        let result_float = resolver.resolve_float_value("test-flag", &context).await;
+        let result_string = resolver.resolve_string_value("test-flag", &context).await;
+        let result_struct = resolver.resolve_struct_value("test-flag", &context).await;
+
+        assert!(result_bool.is_err());
+        assert!(result_int.is_err());
+        assert!(result_float.is_err());
+        assert!(result_string.is_err());
+        assert!(result_struct.is_err());
+
+        assert_eq!(
+            result_bool.unwrap_err().code,
+            EvaluationErrorCode::General("authentication/authorization error".to_string())
+        );
+        assert_eq!(
+            result_int.unwrap_err().code,
+            EvaluationErrorCode::General("authentication/authorization error".to_string())
+        );
+        assert_eq!(
+            result_float.unwrap_err().code,
+            EvaluationErrorCode::General("authentication/authorization error".to_string())
+        );
+        assert_eq!(
+            result_string.unwrap_err().code,
+            EvaluationErrorCode::General("authentication/authorization error".to_string())
+        );
+        assert_eq!(
+            result_struct.unwrap_err().code,
+            EvaluationErrorCode::General("authentication/authorization error".to_string())
+        );
+    }
+
+    #[test(tokio::test)]
+    async fn test_error_403() {
+        let (mock_server, resolver) = setup_mock_server().await;
+
+        Mock::given(method("POST"))
+            .and(path("/ofrep/v1/evaluate/flags/test-flag"))
+            .respond_with(ResponseTemplate::new(403).set_body_json(json!({})))
+            .mount(&mock_server)
+            .await;
+
+        let context = EvaluationContext::default();
+
+        let result_bool = resolver.resolve_bool_value("test-flag", &context).await;
+        let result_int = resolver.resolve_int_value("test-flag", &context).await;
+        let result_float = resolver.resolve_float_value("test-flag", &context).await;
+        let result_string = resolver.resolve_string_value("test-flag", &context).await;
+        let result_struct = resolver.resolve_struct_value("test-flag", &context).await;
+
+        assert!(result_bool.is_err());
+        assert!(result_int.is_err());
+        assert!(result_float.is_err());
+        assert!(result_string.is_err());
+        assert!(result_struct.is_err());
+
+        assert_eq!(
+            result_bool.unwrap_err().code,
+            EvaluationErrorCode::General("authentication/authorization error".to_string())
+        );
+        assert_eq!(
+            result_int.unwrap_err().code,
+            EvaluationErrorCode::General("authentication/authorization error".to_string())
+        );
+        assert_eq!(
+            result_float.unwrap_err().code,
+            EvaluationErrorCode::General("authentication/authorization error".to_string())
+        );
+        assert_eq!(
+            result_string.unwrap_err().code,
+            EvaluationErrorCode::General("authentication/authorization error".to_string())
+        );
+        assert_eq!(
+            result_struct.unwrap_err().code,
+            EvaluationErrorCode::General("authentication/authorization error".to_string())
+        );
+    }
+
+    #[test(tokio::test)]
+    async fn test_error_404() {
+        let (mock_server, resolver) = setup_mock_server().await;
+
+        Mock::given(method("POST"))
+            .and(path("/ofrep/v1/evaluate/flags/test-flag"))
+            .respond_with(ResponseTemplate::new(404).set_body_json(json!({})))
+            .mount(&mock_server)
+            .await;
+
+        let context = EvaluationContext::default();
+
+        let result_bool = resolver.resolve_bool_value("test-flag", &context).await;
+        let result_int = resolver.resolve_int_value("test-flag", &context).await;
+        let result_float = resolver.resolve_float_value("test-flag", &context).await;
+        let result_string = resolver.resolve_string_value("test-flag", &context).await;
+        let result_struct = resolver.resolve_struct_value("test-flag", &context).await;
+
+        assert!(result_bool.is_err());
+        assert!(result_int.is_err());
+        assert!(result_float.is_err());
+        assert!(result_string.is_err());
+        assert!(result_struct.is_err());
+
+        let result_bool_error = result_bool.unwrap_err();
+        assert_eq!(result_bool_error.code, EvaluationErrorCode::FlagNotFound);
+        assert_eq!(
+            result_bool_error.message.unwrap(),
+            "Flag: test-flag not found"
+        );
+
+        let result_int_error = result_int.unwrap_err();
+        assert_eq!(result_int_error.code, EvaluationErrorCode::FlagNotFound);
+        assert_eq!(
+            result_int_error.message.unwrap(),
+            "Flag: test-flag not found"
+        );
+
+        let result_float_error = result_float.unwrap_err();
+        assert_eq!(result_float_error.code, EvaluationErrorCode::FlagNotFound);
+        assert_eq!(
+            result_float_error.message.unwrap(),
+            "Flag: test-flag not found"
+        );
+
+        let result_string_error = result_string.unwrap_err();
+        assert_eq!(result_string_error.code, EvaluationErrorCode::FlagNotFound);
+        assert_eq!(
+            result_string_error.message.unwrap(),
+            "Flag: test-flag not found"
+        );
+
+        let result_struct_error = result_struct.unwrap_err();
+        assert_eq!(result_struct_error.code, EvaluationErrorCode::FlagNotFound);
+        assert_eq!(
+            result_struct_error.message.unwrap(),
+            "Flag: test-flag not found"
+        );
     }
 }
