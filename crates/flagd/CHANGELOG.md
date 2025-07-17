@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.8](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagd-v0.0.7...open-feature-flagd-v0.0.8) (2025-07-11)
+
+
+### 🐛 Bug Fixes
+
+* **deps:** update rust crate lru to 0.16 ([#56](https://github.com/open-feature/rust-sdk-contrib/issues/56)) ([a57f8f9](https://github.com/open-feature/rust-sdk-contrib/commit/a57f8f908a6102a09a2dcb5f56c799c9744c6696))
+* response code to open feature error mapping ([#55](https://github.com/open-feature/rust-sdk-contrib/issues/55)) ([02722c0](https://github.com/open-feature/rust-sdk-contrib/commit/02722c064dd90442bcf43308ccc4b4ccc8ce43a1))
+
 ## [0.0.7](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagd-v0.0.6...open-feature-flagd-v0.0.7) (2025-06-01)
 
 
