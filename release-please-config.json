@@ -6,7 +6,8 @@
   "packages": {
     "crates/env-var": {},
     "crates/flagd": {},
-    "crates/flipt": {}
+    "crates/flipt": {},
+    "crates/ofrep": {}
   },
   "changelog-sections": [
     {
