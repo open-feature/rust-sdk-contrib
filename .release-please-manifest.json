@@ -2,5 +2,5 @@
   "crates/env-var": "0.1.0",
   "crates/flagd": "0.0.8",
   "crates/flipt": "0.1.0",
-  "crates/ofrep": "0.0.1"
+  "crates/ofrep": "0.0.2"
 }
