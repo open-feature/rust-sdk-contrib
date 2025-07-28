@@ -6,7 +6,7 @@ feature flag evaluation in your applications.
 
 This provider allows to connect to any feature flag management system that supports OFREP.
 
-### Installation
+#### Installation
 Add the dependency in your `Cargo.toml`:
 ```bash
 cargo add open-feature-ofrep
@@ -29,7 +29,7 @@ async fn main() {
     let provider = OfrepProvider::new(OfrepOptions {
         base_url: "http://localhost:8016".to_string(),
         headers: headers.clone(),
-        connect_timeout: Duration::from_secs(4), 
+        connect_timeout: Duration::from_secs(4),
         ..Default::default()
     }).await.unwrap();
 
@@ -42,7 +42,7 @@ async fn main() {
 }
 ```
 
-### Configuration Options
+#### Configuration Options
 Configurations can be provided as constructor options. The following options are supported:
 
 | Option                                  | Type / Supported Value            | Default                             |
@@ -51,6 +51,5 @@ Configurations can be provided as constructor options. The following options are
 | headers                                 | HeaderMap                         | Empty Map                           |
 | connect_timeout                         | Duration                          | 10 seconds                          |
 
-### License
+#### License
 Apache 2.0 - See [LICENSE](./../../LICENSE) for more information.
-

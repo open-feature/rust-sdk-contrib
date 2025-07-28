@@ -1,5 +1,10 @@
 [package]
 name = "open-feature-ofrep"
+description = "The official OpenFeature Remote Evaluation Protocol (OFREP) provider for OpenFeature."
+documentation = "https://docs.rs/open-feature-ofrep"
+homepage = "https://openfeature.dev/"
+license = "Apache-2.0"
+repository = "https://github.com/open-feature/rust-sdk-contrib"
 version = "0.0.2"
 edition = "2024"
 
