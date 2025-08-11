@@ -29,6 +29,9 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y protobuf-compiler
 
+    - name: Install Rust
+      run: rustup update --no-self-update stable && rustup default stable
+
     - name: Setup cache
       uses: Swatinem/rust-cache@v2
 

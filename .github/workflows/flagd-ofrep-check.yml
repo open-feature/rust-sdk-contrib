@@ -4,11 +4,13 @@ on:
   push:
     paths:
       - 'crates/flagd/**'
-      - '.github/workflows/flagd-check.yml'
+      - 'crates/ofrep/**'
+      - '.github/workflows/flagd-ofrep-check.yml'
   pull_request:
     paths:
       - 'crates/flagd/**'
-      - '.github/workflows/flagd-check.yml'
+      - 'crates/ofrep/**'
+      - '.github/workflows/flagd-ofrep-check.yml'
 
 jobs:
   check:
@@ -23,6 +25,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y protobuf-compiler
+
+      - name: Install Rust
+        run: rustup update --no-self-update stable && rustup default stable
 
       - name: Install cargo-msrv and cargo-readme
         working-directory: crates/flagd
