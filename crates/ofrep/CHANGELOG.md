@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.4](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-ofrep-v0.0.3...open-feature-ofrep-v0.0.4) (2025-08-11)
+
+
+### 🐛 Bug Fixes
+
+* extend flagd ci to ofrep, add msrv ([#65](https://github.com/open-feature/rust-sdk-contrib/issues/65)) ([692c588](https://github.com/open-feature/rust-sdk-contrib/commit/692c588bc411ef4f1b8ef1baaca89db9b9df02eb))
+
 ## [0.0.3](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-ofrep-v0.0.2...open-feature-ofrep-v0.0.3) (2025-07-28)
 
 
