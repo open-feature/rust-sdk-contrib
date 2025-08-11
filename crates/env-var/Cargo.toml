@@ -3,21 +3,24 @@
 name = "open-feature-env-var"
 version = "0.1.0"
 edition = "2021"
-description = "Open Feature SDK for Rust: Environment Variable"
+description = "Environment Variable provider for OpenFeature"
 authors = ["Jose Bovet Derpich <jose.bovet@gmail.com>"]
-repository = "https://github.com/open-feature/rust-sdk-contrib/tree/main/crates/env-var"
+repository = "https://github.com/open-feature/rust-sdk-contrib"
+homepage = "https://github.com/open-feature/rust-sdk-contrib/tree/main/crates/env-var"
+license = "Apache-2.0"
+keywords = ["open-feature", "feature-flag", "environment-variable"]
 
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[badges]
+maintenance = { status = "actively-developed" }
 
 [dependencies]
-open-feature = "0.2.3"
-async-trait = "0.1.80"
+open-feature = "0.2.5"
+async-trait = "0.1.88"
 
 [dev-dependencies]
-tokio = { version = "1.37.0", features = ["full"] }
-cucumber = "0.21.0"
-futures = "0.3.30"
+tokio = { version = "1.47.1", features = ["full"] }
+cucumber = "0.21.1"
+futures = "0.3.31"
 
 [[test]]
 name = "example"
