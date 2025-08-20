@@ -50,3 +50,7 @@ Run `cargo test` to execute tests.
 ## Maintainers
 
 - [Jose Bovet Derpich](https://github.com/jbovet)
+
+## License
+
+Apache 2.0 - See [LICENSE](./../../LICENSE) for more information.
