@@ -21,7 +21,7 @@ include = [
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [build-dependencies]
-tonic-build = "0.13"
+tonic-build = "0.14"
 
 [dev-dependencies]
 cucumber = "0.21"
@@ -36,7 +36,7 @@ test-log = { version = "0.2", features = ["trace"] }
 [dependencies]
 open-feature = "0.2"
 async-trait = "0.1"
-tonic = { version = "0.13" }
+tonic = { version = "0.14" }
 prost = "0.13"
 prost-types = "0.13"
 tokio = { version = "1.45", features = ["full"] }
