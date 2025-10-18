@@ -171,7 +171,6 @@ impl RpcResolver {
                     std::str::FromStr::from_str(&format!("http://{}", authority_str))?;
                 endpoint = endpoint.origin(authority_uri);
             }
-        }
 
         let channel = endpoint
             .timeout(Duration::from_millis(options.deadline_ms as u64))
