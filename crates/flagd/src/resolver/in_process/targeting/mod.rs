@@ -14,6 +14,12 @@ pub struct Operator {
     logic: Arc<DataLogic>,
 }
 
+impl Default for Operator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Operator {
     pub fn new() -> Self {
         // Create a new DataLogic instance

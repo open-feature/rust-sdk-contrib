@@ -85,11 +85,10 @@ impl InProcessResolver {
         context: &EvaluationContext,
         value_converter: impl Fn(&OpenFeatureValue) -> Option<T>,
     ) -> Option<T> {
-        if let Some(cache) = &self.cache {
-            if let Some(cached_value) = cache.get(flag_key, context).await {
+        if let Some(cache) = &self.cache
+            && let Some(cached_value) = cache.get(flag_key, context).await {
                 return value_converter(&cached_value);
             }
-        }
         None
     }
 
@@ -117,7 +116,7 @@ impl InProcessResolver {
                 OpenFeatureValue::Array(arr) => {
                     // Convert OpenFeature array to JsonValue array
                     let json_array =
-                        JsonValue::Array(arr.iter().map(|v| convert_to_json_value(v)).collect());
+                        JsonValue::Array(arr.iter().map(convert_to_json_value).collect());
                     value_converter(&json_array)
                 }
             })
@@ -309,7 +308,7 @@ fn convert_to_json_value(value: &OpenFeatureValue) -> JsonValue {
         OpenFeatureValue::Float(f) => JsonValue::Number(serde_json::Number::from_f64(*f).unwrap()),
         OpenFeatureValue::Struct(s) => convert_struct_to_json(s),
         OpenFeatureValue::Array(arr) => {
-            JsonValue::Array(arr.iter().map(|v| convert_to_json_value(v)).collect())
+            JsonValue::Array(arr.iter().map(convert_to_json_value).collect())
         }
     }
 }

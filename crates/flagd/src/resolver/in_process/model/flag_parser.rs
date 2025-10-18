@@ -21,7 +21,7 @@ impl FlagParser {
         let flag_set_metadata = obj
             .get("metadata")
             .and_then(|v| v.as_object())
-            .map(|m| Self::convert_map_to_hashmap(m))
+            .map(Self::convert_map_to_hashmap)
             .unwrap_or_default();
 
         let mut flag_map = HashMap::new();

@@ -158,8 +158,8 @@ impl RpcResolver {
         let mut endpoint = upstream_config.endpoint().clone();
 
         // Extend support for envoy names resolution
-        if let Some(uri) = &options.target_uri {
-            if uri.starts_with("envoy://") {
+        if let Some(uri) = &options.target_uri
+            && uri.starts_with("envoy://") {
                 // Expected format: envoy://<host:port>/<desired_authority>
                 let without_prefix = uri.trim_start_matches("envoy://");
                 let segments: Vec<&str> = without_prefix.split('/').collect();
@@ -171,7 +171,6 @@ impl RpcResolver {
                     endpoint = endpoint.origin(authority_uri);
                 }
             }
-        }
 
         let channel = endpoint
             .timeout(Duration::from_millis(options.deadline_ms as u64))
