@@ -90,6 +90,7 @@ impl FileResolver {
             if let Some(value) = value_converter(&json_value) {
                 return Ok(ResolutionDetails::new(value));
             }
+        }
 
         let query_result = self.store.get_flag(flag_key).await;
 
