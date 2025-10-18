@@ -159,18 +159,19 @@ impl RpcResolver {
 
         // Extend support for envoy names resolution
         if let Some(uri) = &options.target_uri
-            && uri.starts_with("envoy://") {
-                // Expected format: envoy://<host:port>/<desired_authority>
-                let without_prefix = uri.trim_start_matches("envoy://");
-                let segments: Vec<&str> = without_prefix.split('/').collect();
-                if segments.len() >= 2 {
-                    let authority_str = segments[1];
-                    // Create a full URI from the authority for endpoint.origin()
-                    let authority_uri =
-                        std::str::FromStr::from_str(&format!("http://{}", authority_str))?;
-                    endpoint = endpoint.origin(authority_uri);
-                }
+            && uri.starts_with("envoy://")
+        {
+            // Expected format: envoy://<host:port>/<desired_authority>
+            let without_prefix = uri.trim_start_matches("envoy://");
+            let segments: Vec<&str> = without_prefix.split('/').collect();
+            if segments.len() >= 2 {
+                let authority_str = segments[1];
+                // Create a full URI from the authority for endpoint.origin()
+                let authority_uri =
+                    std::str::FromStr::from_str(&format!("http://{}", authority_str))?;
+                endpoint = endpoint.origin(authority_uri);
             }
+        }
 
         let channel = endpoint
             .timeout(Duration::from_millis(options.deadline_ms as u64))

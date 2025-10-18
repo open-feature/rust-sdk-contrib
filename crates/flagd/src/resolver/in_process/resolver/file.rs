@@ -51,13 +51,14 @@ impl FileResolver {
         type_name: &str,
     ) -> Result<ResolutionDetails<T>, EvaluationError> {
         if let Some(cache) = &self.cache
-            && let Some(cached_value) = cache.get(flag_key, context).await {
-                debug!("Cache hit for key: {}", flag_key);
-                let json_value = cached_value.to_serde_json();
-                if let Some(value) = value_converter(&json_value) {
-                    return Ok(ResolutionDetails::new(value));
-                }
+            && let Some(cached_value) = cache.get(flag_key, context).await
+        {
+            debug!("Cache hit for key: {}", flag_key);
+            let json_value = cached_value.to_serde_json();
+            if let Some(value) = value_converter(&json_value) {
+                return Ok(ResolutionDetails::new(value));
             }
+        }
 
         let query_result = self.store.get_flag(flag_key).await;
 

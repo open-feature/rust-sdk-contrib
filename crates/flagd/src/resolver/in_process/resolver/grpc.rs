@@ -86,9 +86,10 @@ impl InProcessResolver {
         value_converter: impl Fn(&OpenFeatureValue) -> Option<T>,
     ) -> Option<T> {
         if let Some(cache) = &self.cache
-            && let Some(cached_value) = cache.get(flag_key, context).await {
-                return value_converter(&cached_value);
-            }
+            && let Some(cached_value) = cache.get(flag_key, context).await
+        {
+            return value_converter(&cached_value);
+        }
         None
     }
 
