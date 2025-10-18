@@ -37,7 +37,7 @@
 //!     };
 //!     let resolver = RpcResolver::new(&options).await.unwrap();
 //!     let context = EvaluationContext::default();
-//!     
+//!
 //!     let result = resolver.resolve_bool_value("my-flag", &context).await.unwrap();
 //!     println!("Flag value: {}", result.value);
 //! }
@@ -46,11 +46,11 @@
 #[allow(unused_imports)]
 use crate::flagd::evaluation::v1::EventStreamRequest;
 use crate::flagd::evaluation::v1::{
-    service_client::ServiceClient, ResolveBooleanRequest, ResolveBooleanResponse,
-    ResolveFloatRequest, ResolveFloatResponse, ResolveIntRequest, ResolveIntResponse,
-    ResolveObjectRequest, ResolveObjectResponse, ResolveStringRequest, ResolveStringResponse,
+    ResolveBooleanRequest, ResolveBooleanResponse, ResolveFloatRequest, ResolveFloatResponse,
+    ResolveIntRequest, ResolveIntResponse, ResolveObjectRequest, ResolveObjectResponse,
+    ResolveStringRequest, ResolveStringResponse, service_client::ServiceClient,
 };
-use crate::{convert_context, convert_proto_struct_to_struct_value, FlagdOptions};
+use crate::{FlagdOptions, convert_context, convert_proto_struct_to_struct_value};
 use async_trait::async_trait;
 use hyper_util::rt::TokioIo;
 use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
@@ -358,8 +358,8 @@ impl FeatureProvider for RpcResolver {
 mod tests {
     use super::*;
     use crate::flagd::evaluation::v1::{
-        service_server::{Service, ServiceServer},
         EventStreamResponse, ResolveAllRequest, ResolveAllResponse,
+        service_server::{Service, ServiceServer},
     };
     use futures_core::Stream;
     use serial_test::serial;
@@ -370,7 +370,7 @@ mod tests {
     use tokio::sync::oneshot;
     use tokio::{net::TcpListener, time::Instant};
     use tokio_stream::wrappers::UnixListenerStream;
-    use tonic::{transport::Server, Request, Response, Status};
+    use tonic::{Request, Response, Status, transport::Server};
 
     pub struct MockFlagService;
 
@@ -683,12 +683,19 @@ mod tests {
     #[test(tokio::test(flavor = "multi_thread", worker_threads = 1))]
     #[serial]
     async fn test_retry_mechanism() {
+        // Bind to a port but don't accept connections - this causes immediate connection failures
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        // Drop the listener immediately to ensure the port rejects connections
+        drop(listener);
+
         let options = FlagdOptions {
-            host: "invalid-host".to_string(),
-            port: 8013,
+            host: addr.ip().to_string(),
+            port: addr.port(),
             retry_backoff_ms: 100,
             retry_backoff_max_ms: 400,
             retry_grace_period: 3,
+            deadline_ms: 100, // Short timeout for fast failures
             ..Default::default()
         };
 

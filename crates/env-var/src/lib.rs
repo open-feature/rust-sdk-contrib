@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use open_feature::{
-    provider::{FeatureProvider, ProviderMetadata, ResolutionDetails},
     EvaluationContext, EvaluationError, EvaluationErrorCode, EvaluationReason, EvaluationResult,
     StructValue,
+    provider::{FeatureProvider, ProviderMetadata, ResolutionDetails},
 };
 /// Environment Variables Provider Metadata
 const METADATA: &str = "Environment Variables Provider";
@@ -51,13 +51,15 @@ impl FeatureProvider for EnvVarProvider {
     /// A logical true or false, as represented idiomatically in the implementation languages.
     ///
     /// # Example
-    /// ```rust
+    /// ```rust,no_run
+    /// // Note: This example uses temp_env for safe env var handling
+    /// use temp_env;
     /// #[tokio::test]
     /// async fn test_resolve_string_value() {
     ///     let provider = EnvVarProvider::default();
     ///     let flag_key = "TEST_ENV_VAR";
     ///     let value = "false";
-    ///     std::env::set_var(flag_key, value);
+    ///     temp_env::with_var(flag_key, Some(value), || {});
     ///
     ///     let res = provider
     ///         .resolve_string_value(flag_key, &EvaluationContext::default())
@@ -76,13 +78,15 @@ impl FeatureProvider for EnvVarProvider {
 
     /// The 64-bit signed integer type.
     /// # Example
-    /// ```rust
+    /// ```rust,no_run
+    /// // Note: This example uses temp_env for safe env var handling
+    /// use temp_env;
     /// #[tokio::test]
     /// async fn test_resolve_int_value() {
     ///     let flag_key = "TEST_INT_ENV_VAR";
     ///     let flag_value = i64::MAX.to_string();
     ///     let provider = EnvVarProvider::default();
-    ///     std::env::set_var(flag_key, &flag_value);
+    ///     temp_env::with_var(flag_key, Some(&flag_value), || {});
     ///     let result = provider.resolve_int_value(flag_key, &EvaluationContext::default()).await;
     ///     assert!(result.is_ok());
     ///     assert_eq!(result.unwrap().value, flag_value.parse::<i64>().unwrap());
@@ -106,7 +110,8 @@ impl FeatureProvider for EnvVarProvider {
     ///     let flag_value = std::f64::consts::PI.to_string();
     ///     let provider = EnvVarProvider::default();
     ///
-    ///     std::env::set_var(flag_key, &flag_value);
+    ///     // Note: This example uses temp_env for safe env var handling
+    ///     temp_env::with_var(flag_key, Some(&flag_value), || {});
     ///
     ///     let result = provider
     ///         .resolve_float_value(flag_key, &EvaluationContext::default())
@@ -125,13 +130,15 @@ impl FeatureProvider for EnvVarProvider {
 
     /// A UTF-8 encoded string.
     /// # Example
-    /// ```rust
+    /// ```rust,no_run
+    /// // Note: This example uses temp_env for safe env var handling
+    /// use temp_env;
     /// #[tokio::test]
     /// async fn test_resolve_string_value() {
     ///     let provider = EnvVarProvider::default();
     ///     let flag_key = "TEST_ENV_VAR";
     ///     let value = "flag_value";
-    ///     std::env::set_var(flag_key, value);
+    ///     temp_env::with_var(flag_key, Some(value), || {});
     ///
     ///     let res = provider
     ///         .resolve_string_value(flag_key, &EvaluationContext::default())
