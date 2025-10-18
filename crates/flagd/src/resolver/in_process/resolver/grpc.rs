@@ -3,14 +3,14 @@ use crate::resolver::in_process::targeting::Operator;
 use crate::{CacheService, FlagdOptions};
 use anyhow::Result;
 use async_trait::async_trait;
-use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
 use open_feature::Value as OpenFeatureValue;
+use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
 use open_feature::{EvaluationContext, EvaluationError, EvaluationErrorCode, StructValue, Value};
 use serde_json::Value as JsonValue;
 use std::sync::Arc;
 
-use crate::resolver::in_process::storage::connector::grpc::GrpcStreamConnector;
 use crate::resolver::in_process::storage::FlagStore;
+use crate::resolver::in_process::storage::connector::grpc::GrpcStreamConnector;
 
 pub struct InProcessResolver {
     store: Arc<FlagStore>,
@@ -134,7 +134,7 @@ impl InProcessResolver {
                 return Err(EvaluationError::builder()
                     .code(EvaluationErrorCode::FlagNotFound)
                     .message(format!("Flag {} not found", flag_key))
-                    .build())
+                    .build());
             }
         };
 
@@ -194,7 +194,7 @@ impl InProcessResolver {
                         variant: Some(variant),
                         reason: Some(open_feature::EvaluationReason::TargetingMatch),
                         flag_metadata: None,
-                    })
+                    });
                 }
             };
             cache.add(flag_key, context, cache_value).await;

@@ -1,4 +1,4 @@
-use common::{Flagd, FLAGD_CONFIG, FLAGD_OFREP_PORT, FLAGD_PORT, FLAGD_SYNC_PORT};
+use common::{FLAGD_CONFIG, FLAGD_OFREP_PORT, FLAGD_PORT, FLAGD_SYNC_PORT, Flagd};
 use open_feature::provider::FeatureProvider;
 use open_feature::{EvaluationContext, Value};
 use open_feature_flagd::{CacheSettings, CacheType, FlagdOptions, FlagdProvider, ResolverType};

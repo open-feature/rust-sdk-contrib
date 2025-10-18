@@ -68,7 +68,7 @@ impl FileResolver {
                 return Err(EvaluationError::builder()
                     .code(EvaluationErrorCode::FlagNotFound)
                     .message(format!("Flag {} not found", flag_key))
-                    .build())
+                    .build());
             }
         };
 

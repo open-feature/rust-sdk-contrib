@@ -1,10 +1,10 @@
 use super::{Connector, QueuePayload, QueuePayloadType};
 use anyhow::Result;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::Mutex;
+use tokio::sync::mpsc::{Receiver, Sender, channel};
 use tokio::time::Duration;
 use tracing::{debug, error};
 

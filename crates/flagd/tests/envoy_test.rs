@@ -1,10 +1,10 @@
-use common::{Envoy, Flagd, ENVOY_CONFIG, ENVOY_PORT, FLAGD_PORT, FLAGD_SYNC_PORT};
-use open_feature::provider::FeatureProvider;
+use common::{ENVOY_CONFIG, ENVOY_PORT, Envoy, FLAGD_PORT, FLAGD_SYNC_PORT, Flagd};
 use open_feature::EvaluationContext;
+use open_feature::provider::FeatureProvider;
 use open_feature_flagd::{FlagdOptions, FlagdProvider, ResolverType};
 use test_log::test;
-use testcontainers::runners::AsyncRunner;
 use testcontainers::ImageExt;
+use testcontainers::runners::AsyncRunner;
 
 mod common;
 

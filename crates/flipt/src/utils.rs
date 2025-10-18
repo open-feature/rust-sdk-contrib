@@ -29,7 +29,7 @@ pub(crate) fn parse_json(json: &str) -> Result<Value, EvaluationError> {
             return Err(EvaluationError {
                 code: EvaluationErrorCode::General("Parse error in JSON".to_owned()),
                 message: Some(format!("Failed to parse JSON: {}", e)),
-            })
+            });
         }
     };
     serde_to_openfeature_value(v)
