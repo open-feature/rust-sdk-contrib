@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use async_trait::async_trait;
 use open_feature::{
     EvaluationContext, EvaluationError, EvaluationErrorCode, EvaluationReason, EvaluationResult,
@@ -19,22 +21,30 @@ const METADATA: &str = "Environment Variables Provider";
 ///
 /// The provider will return [`EvaluationResult::Err(EvaluationError)`] if the flag is not found or if the value is not of the expected type.
 #[derive(Debug)]
-pub struct EnvVarProvider {
+pub struct EnvVarProvider<R = NoopRename> {
     metadata: ProviderMetadata,
+    rename: R,
 }
 
 /// Default implementation for the Environment Variables Provider
 impl Default for EnvVarProvider {
     fn default() -> Self {
+        Self::new(NoopRename)
+    }
+}
+
+impl<R> EnvVarProvider<R> {
+    pub fn new(rename: R) -> Self {
         Self {
             metadata: ProviderMetadata::new(METADATA),
+            rename,
         }
     }
 }
 
 /// Implementation of the FeatureProvider trait for the Environment Variables Provider
 #[async_trait]
-impl FeatureProvider for EnvVarProvider {
+impl<R: Rename> FeatureProvider for EnvVarProvider<R> {
     /// Returns the provider metadata
     /// # Example
     /// ```rust
@@ -73,7 +83,7 @@ impl FeatureProvider for EnvVarProvider {
         flag_key: &str,
         evaluation_context: &EvaluationContext,
     ) -> EvaluationResult<ResolutionDetails<bool>> {
-        return evaluate_environment_variable(flag_key, evaluation_context);
+        return evaluate_environment_variable(&self.rename, flag_key, evaluation_context);
     }
 
     /// The 64-bit signed integer type.
@@ -97,7 +107,7 @@ impl FeatureProvider for EnvVarProvider {
         flag_key: &str,
         evaluation_context: &EvaluationContext,
     ) -> EvaluationResult<ResolutionDetails<i64>> {
-        return evaluate_environment_variable(flag_key, evaluation_context);
+        return evaluate_environment_variable(&self.rename, flag_key, evaluation_context);
     }
 
     /// A 64-bit floating point type
@@ -125,7 +135,7 @@ impl FeatureProvider for EnvVarProvider {
         flag_key: &str,
         evaluation_context: &EvaluationContext,
     ) -> EvaluationResult<ResolutionDetails<f64>> {
-        return evaluate_environment_variable(flag_key, evaluation_context);
+        return evaluate_environment_variable(&self.rename, flag_key, evaluation_context);
     }
 
     /// A UTF-8 encoded string.
@@ -152,7 +162,7 @@ impl FeatureProvider for EnvVarProvider {
         flag_key: &str,
         evaluation_context: &EvaluationContext,
     ) -> EvaluationResult<ResolutionDetails<String>> {
-        return evaluate_environment_variable(flag_key, evaluation_context);
+        return evaluate_environment_variable(&self.rename, flag_key, evaluation_context);
     }
 
     /// Structured data, presented however is idiomatic in the implementation language, such as JSON or YAML.
@@ -179,11 +189,13 @@ impl FeatureProvider for EnvVarProvider {
 /// assert_eq!(res.unwrap_err().code, EvaluationErrorCode::FlagNotFound);
 /// }
 /// ```
-fn evaluate_environment_variable<T: std::str::FromStr>(
+fn evaluate_environment_variable<R: Rename, T: std::str::FromStr>(
+    rename: &R,
     flag_key: &str,
     _evaluation_context: &EvaluationContext,
 ) -> EvaluationResult<ResolutionDetails<T>> {
-    match std::env::var(flag_key) {
+    let env_var = rename.rename(flag_key);
+    match std::env::var(env_var.as_ref()) {
         Ok(value) => match value.parse::<T>() {
             Ok(parsed_value) => EvaluationResult::Ok(
                 ResolutionDetails::builder()
@@ -215,6 +227,51 @@ fn error<T>(evaluation_error_code: EvaluationErrorCode) -> EvaluationResult<T> {
         .build())
 }
 
+/// Rename helps converting flag keys to environment variable names
+///
+/// # Example
+/// ```rust
+/// fn underscore(flag_key: &str) -> std::borrow::Cow<'_, str> {
+///     flag_key.replace("-", "_").to_uppercase().into()
+/// }
+///
+/// #[tokio::test]
+/// async fn test_rename() {
+///     let flag_key = "test-rename-key";
+///     let flag_value = std::f64::consts::PI.to_string();
+///     let provider = EnvVarProvider::new(underscore);
+///
+///     std::env::set_var("TEST_RENAME_KEY", &flag_value);
+///
+///     let result = provider
+///         .resolve_float_value(flag_key, &EvaluationContext::default())
+///         .await;
+///     assert!(result.is_ok());
+///     assert_eq!(result.unwrap().value, flag_value.parse::<f64>().unwrap());
+/// }
+/// ```
+pub trait Rename: Send + Sync + 'static {
+    fn rename<'a>(&self, flag_key: &'a str) -> Cow<'a, str>;
+}
+
+#[derive(Copy, Clone, Default, Debug)]
+pub struct NoopRename;
+
+impl Rename for NoopRename {
+    fn rename<'a>(&self, flag_key: &'a str) -> Cow<'a, str> {
+        flag_key.into()
+    }
+}
+
+impl<F> Rename for F
+where
+    F: Fn(&str) -> Cow<'_, str> + Send + Sync + 'static,
+{
+    fn rename<'a>(&self, flag_key: &'a str) -> Cow<'a, str> {
+        (self)(flag_key)
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -236,5 +293,33 @@ mod tests {
         assert!(provider.resolve_float_value("", &context).await.is_err());
         assert!(provider.resolve_string_value("", &context).await.is_err());
         assert!(provider.resolve_struct_value("", &context).await.is_err());
+    }
+
+    #[test]
+    fn noop_rename_does_nothing() {
+        let flag_key = "test-key";
+        assert_eq!(NoopRename.rename(flag_key), flag_key);
+    }
+
+    fn underscore(flag_key: &str) -> Cow<'_, str> {
+        flag_key.replace("-", "_").to_uppercase().into()
+    }
+
+    #[tokio::test]
+    async fn resolves_with_a_custom_rename() {
+        let provider = EnvVarProvider::new(underscore);
+        let context = EvaluationContext::default();
+
+        unsafe {
+            std::env::set_var("HELLO_WORLD", "true");
+        }
+
+        assert!(
+            provider
+                .resolve_bool_value("hello-world", &context)
+                .await
+                .unwrap()
+                .value
+        );
     }
 }
