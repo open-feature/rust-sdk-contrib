@@ -1,11 +1,7 @@
 use cucumber::{World, given, then, when};
 use open_feature_flagd::{CacheSettings, CacheType, FlagdOptions, FlagdProvider, ResolverType};
 use std::collections::HashMap;
-use std::sync::Mutex;
 use test_log::test;
-
-// Global lock to ensure env var tests don't interfere with each other
-static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, World)]
 #[world(init = Self::new)]
@@ -29,7 +25,7 @@ impl ConfigWorld {
     fn clear(&mut self) {
         // SAFETY: Removing environment variables is safe here because:
         // 1. We're only removing variables that were set during this specific test scenario
-        // 2. The test is protected by #[serial_test::serial] and ENV_LOCK
+        // 2. The test is protected by #[serial_test::serial]
         // 3. This prevents test pollution between scenarios
         // 4. All variables being removed are tracked in world.env_vars
         for key in self.env_vars.keys() {
@@ -98,9 +94,8 @@ async fn env_with_value(world: &mut ConfigWorld, env: String, value: String) {
 
     // SAFETY: Setting environment variables is safe here because:
     // 1. The test function is annotated with #[serial_test::serial], ensuring no parallel execution
-    // 2. We hold ENV_LOCK for the entire test duration (acquired in config_test())
-    // 3. ConfigWorld::clear() is called before each scenario to clean up all env vars
-    // 4. All env vars set during the test are tracked in world.env_vars for guaranteed cleanup
+    // 2. ConfigWorld::clear() is called before each scenario to clean up all env vars
+    // 3. All env vars set during the test are tracked in world.env_vars for guaranteed cleanup
     //
     // Note: We cannot use temp-env here because it only sets variables within a closure scope,
     // but cucumber scenarios need variables to persist across multiple async step functions.
@@ -286,9 +281,6 @@ async fn check_option_value(
 #[serial_test::serial]
 async fn config_test() {
     // tracing_subscriber::fmt::init();
-    // Acquire global lock to ensure env var safety across scenarios
-    let _lock = ENV_LOCK.lock().unwrap();
-
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
     let feature_path = format!("{}/flagd-testbed/gherkin/config.feature", manifest_dir);
     ConfigWorld::cucumber()
