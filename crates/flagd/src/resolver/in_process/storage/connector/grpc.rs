@@ -28,7 +28,7 @@ pub struct GrpcStreamConnector {
     retry_backoff_max_ms: u32,
     retry_grace_period: u32,
     stream_deadline_ms: u32,
-    authority: String, // desired authority, e.g. "b-features-api.service"
+    authority: String,   // desired authority, e.g. "b-features-api.service"
     provider_id: String, // provider identifier for sync requests
 }
 
@@ -53,7 +53,10 @@ impl GrpcStreamConnector {
             retry_grace_period: options.retry_grace_period,
             stream_deadline_ms: options.stream_deadline_ms,
             authority,
-            provider_id: options.provider_id.clone().unwrap_or_else(|| "rust-flagd-provider".to_string()),
+            provider_id: options
+                .provider_id
+                .clone()
+                .unwrap_or_else(|| "rust-flagd-provider".to_string()),
         }
     }
 

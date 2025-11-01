@@ -27,20 +27,20 @@ impl ConfigWorld {
         // 1. The test is protected by #[serial_test::serial]
         // 2. This prevents test pollution between scenarios
         // 3. We clear env vars that were set in previous scenarios
-        
+
         // Clear env vars that were set in the previous scenario
         for key in self.env_vars.keys() {
             unsafe {
                 std::env::remove_var(key);
             }
         }
-        
+
         // Also explicitly clear FLAGD_OFFLINE_FLAG_SOURCE_PATH because it can affect resolver type
         // via FlagdOptions::default() logic, even if not tracked in world.env_vars
         unsafe {
             std::env::remove_var("FLAGD_OFFLINE_FLAG_SOURCE_PATH");
         }
-        
+
         self.env_vars.clear();
         self.options = FlagdOptions::default();
         self.provider = None;
@@ -302,7 +302,7 @@ async fn check_option_value(
         _ => None,
     };
     let expected = convert_type(&option_type, &value);
-    
+
     // For resolver type, do case-insensitive comparison since enum normalizes to lowercase
     let actual_normalized = if option == "resolver" {
         actual.as_ref().map(|v| v.to_lowercase())
@@ -314,8 +314,12 @@ async fn check_option_value(
     } else {
         expected.clone()
     };
-    
-    assert_eq!(actual_normalized, expected_normalized, "Option '{}' value mismatch", option);
+
+    assert_eq!(
+        actual_normalized, expected_normalized,
+        "Option '{}' value mismatch",
+        option
+    );
 }
 
 #[test(tokio::test)]
