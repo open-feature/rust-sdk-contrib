@@ -1,11 +1,7 @@
 use cucumber::{World, given, then, when};
 use open_feature_flagd::{CacheSettings, CacheType, FlagdOptions, FlagdProvider, ResolverType};
 use std::collections::HashMap;
-use std::sync::Mutex;
 use test_log::test;
-
-// Global lock to ensure env var tests don't interfere with each other
-static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, World)]
 #[world(init = Self::new)]
