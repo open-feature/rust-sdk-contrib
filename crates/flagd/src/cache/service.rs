@@ -245,6 +245,13 @@ where
         cache.add(cache_key, entry)
     }
 
+    pub async fn purge(&self) {
+        if self.enabled {
+            let mut cache = self.cache.write().await;
+            cache.purge();
+        }
+    }
+
     pub fn disable(&mut self) {
         if self.enabled {
             self.enabled = false;
