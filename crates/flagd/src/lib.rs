@@ -261,6 +261,9 @@ pub struct FlagdOptions {
     pub stream_deadline_ms: u32,
     /// Offline polling interval in milliseconds
     pub offline_poll_interval_ms: Option<u32>,
+    /// Provider ID for identifying this provider instance to flagd
+    /// Used in in-process resolver for sync requests
+    pub provider_id: Option<String>,
 }
 /// Type of resolver to use for flag evaluation
 #[derive(Debug, Clone, PartialEq)]
@@ -336,6 +339,7 @@ impl Default for FlagdOptions {
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(5000),
             ),
+            provider_id: std::env::var("FLAGD_PROVIDER_ID").ok(),
         };
 
         if options.source_configuration.is_some() && options.resolver_type != ResolverType::Rpc {
