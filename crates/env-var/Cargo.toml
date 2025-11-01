@@ -23,6 +23,7 @@ cucumber = "0.21.1"
 futures = "0.3.31"
 test-with = { version = "0.15", features = ["runtime"] }
 libtest-with = { version = "0.8.1-10" }
+temp-env = "0.3"
 
 [[test]]
 name = "example"
