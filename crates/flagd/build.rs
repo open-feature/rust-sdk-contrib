@@ -1,7 +1,7 @@
 fn main() {
     let out_dir = std::env::var("OUT_DIR").unwrap();
 
-    tonic_build::configure()
+    tonic_prost_build::configure()
         .build_server(true)
         .out_dir(&out_dir)
         .compile_protos(

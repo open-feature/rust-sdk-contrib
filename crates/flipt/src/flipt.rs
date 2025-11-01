@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use flipt::evaluation::models::{EvaluationRequest, VariantEvaluationResponse};
 use open_feature::{
-    provider::{FeatureProvider, ProviderMetadata, ResolutionDetails},
     EvaluationContext, EvaluationError, EvaluationErrorCode, EvaluationResult, StructValue, Value,
+    provider::{FeatureProvider, ProviderMetadata, ResolutionDetails},
 };
 use url::Url;
 

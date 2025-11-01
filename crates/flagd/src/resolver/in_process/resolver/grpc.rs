@@ -3,64 +3,88 @@ use crate::resolver::in_process::targeting::Operator;
 use crate::{CacheService, FlagdOptions};
 use anyhow::Result;
 use async_trait::async_trait;
-use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
 use open_feature::Value as OpenFeatureValue;
+use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
 use open_feature::{EvaluationContext, EvaluationError, EvaluationErrorCode, StructValue, Value};
 use serde_json::Value as JsonValue;
 use std::sync::Arc;
+use tokio::sync::Mutex;
+use tracing::debug;
 
 use crate::resolver::in_process::storage::connector::grpc::GrpcStreamConnector;
-use crate::resolver::in_process::storage::FlagStore;
+use crate::resolver::in_process::storage::{FlagStore, StorageState, StorageStateChange};
 
 pub struct InProcessResolver {
     store: Arc<FlagStore>,
     operator: Operator,
     metadata: ProviderMetadata,
     cache: Option<Arc<CacheService<Value>>>,
+    state_receiver: Arc<Mutex<tokio::sync::mpsc::Receiver<StorageStateChange>>>,
 }
 
 impl InProcessResolver {
     pub async fn new(options: &FlagdOptions) -> Result<Self> {
-        let store = match &options.socket_path {
+        let (store, state_receiver) = match &options.socket_path {
             Some(_) => Self::create_unix_socket_store(options).await?,
             None => Self::create_tcp_store(options).await?,
         };
+
+        let cache = options
+            .cache_settings
+            .clone()
+            .map(|settings| Arc::new(CacheService::new(settings)));
 
         Ok(Self {
             store,
             operator: Operator::new(),
             metadata: ProviderMetadata::new("flagd"),
-            cache: options
-                .cache_settings
-                .clone()
-                .map(|settings| Arc::new(CacheService::new(settings))),
+            cache,
+            state_receiver: Arc::new(Mutex::new(state_receiver)),
         })
     }
 
-    async fn create_unix_socket_store(_options: &FlagdOptions) -> Result<Arc<FlagStore>> {
-        // let socket_path = options.socket_path.as_ref().unwrap().clone();
-        // let socket_path_for_connector = socket_path.clone();
+    /// Check for flag updates and clear cache if needed (non-blocking)
+    async fn check_for_updates(&self) {
+        if self.cache.is_none() {
+            return;
+        }
 
-        // let _channel = Endpoint::try_from("http://[::]:50051")?
-        //     .connect_with_connector(service_fn(move |_: Uri| {
-        //         let path = socket_path.clone();
-        //         async move {
-        //             let stream = UnixStream::connect(path).await?;
-        //             Ok::<_, std::io::Error>(TokioIo::new(stream))
-        //         }
-        //     }))
-        //     .await?;
+        let mut receiver = self.state_receiver.lock().await;
 
-        // let connector =
-        //     GrpcStreamConnector::new(socket_path_for_connector, options.selector.clone(), options);
-        // let (store, _state_receiver) = FlagStore::new(Arc::new(connector));
-        // let store = Arc::new(store);
-        // store.init().await?;
-        // Ok(store)
-        todo!("Unix socket store for in-process is not implemented")
+        // Drain all pending state changes (non-blocking)
+        let mut should_clear = false;
+        while let Ok(state_change) = receiver.try_recv() {
+            if state_change.storage_state == StorageState::Ok {
+                should_clear = true;
+            }
+        }
+
+        if should_clear {
+            debug!("Flag store updated, clearing cache");
+            if let Some(cache) = &self.cache {
+                cache.purge().await;
+            }
+        }
     }
 
-    async fn create_tcp_store(options: &FlagdOptions) -> Result<Arc<FlagStore>> {
+    async fn create_unix_socket_store(
+        _options: &FlagdOptions,
+    ) -> Result<(
+        Arc<FlagStore>,
+        tokio::sync::mpsc::Receiver<crate::resolver::in_process::storage::StorageStateChange>,
+    )> {
+        // Unix socket store for in-process is not implemented
+        Err(anyhow::anyhow!(
+            "Unix socket store for in-process is not implemented"
+        ))
+    }
+
+    async fn create_tcp_store(
+        options: &FlagdOptions,
+    ) -> Result<(
+        Arc<FlagStore>,
+        tokio::sync::mpsc::Receiver<crate::resolver::in_process::storage::StorageStateChange>,
+    )> {
         let target = options
             .target_uri
             .clone()
@@ -73,10 +97,10 @@ impl InProcessResolver {
             upstream_config.authority().to_string(),
         );
 
-        let (store, _state_receiver) = FlagStore::new(Arc::new(connector));
+        let (store, state_receiver) = FlagStore::new(Arc::new(connector));
         let store = Arc::new(store);
         store.init().await?;
-        Ok(store)
+        Ok((store, state_receiver))
     }
 
     async fn get_cached_value<T>(
@@ -85,10 +109,10 @@ impl InProcessResolver {
         context: &EvaluationContext,
         value_converter: impl Fn(&OpenFeatureValue) -> Option<T>,
     ) -> Option<T> {
-        if let Some(cache) = &self.cache {
-            if let Some(cached_value) = cache.get(flag_key, context).await {
-                return value_converter(&cached_value);
-            }
+        if let Some(cache) = &self.cache
+            && let Some(cached_value) = cache.get(flag_key, context).await
+        {
+            return value_converter(&cached_value);
         }
         None
     }
@@ -100,6 +124,9 @@ impl InProcessResolver {
         value_converter: impl Fn(&JsonValue) -> Option<T>,
         type_name: &str,
     ) -> Result<ResolutionDetails<T>, EvaluationError> {
+        // Check for flag updates and clear cache if needed
+        self.check_for_updates().await;
+
         // Try cache first
         if let Some(cached_value) = self
             .get_cached_value(flag_key, context, |v| match v {
@@ -117,7 +144,7 @@ impl InProcessResolver {
                 OpenFeatureValue::Array(arr) => {
                     // Convert OpenFeature array to JsonValue array
                     let json_array =
-                        JsonValue::Array(arr.iter().map(|v| convert_to_json_value(v)).collect());
+                        JsonValue::Array(arr.iter().map(convert_to_json_value).collect());
                     value_converter(&json_array)
                 }
             })
@@ -134,7 +161,7 @@ impl InProcessResolver {
                 return Err(EvaluationError::builder()
                     .code(EvaluationErrorCode::FlagNotFound)
                     .message(format!("Flag {} not found", flag_key))
-                    .build())
+                    .build());
             }
         };
 
@@ -194,7 +221,7 @@ impl InProcessResolver {
                         variant: Some(variant),
                         reason: Some(open_feature::EvaluationReason::TargetingMatch),
                         flag_metadata: None,
-                    })
+                    });
                 }
             };
             cache.add(flag_key, context, cache_value).await;
@@ -309,7 +336,7 @@ fn convert_to_json_value(value: &OpenFeatureValue) -> JsonValue {
         OpenFeatureValue::Float(f) => JsonValue::Number(serde_json::Number::from_f64(*f).unwrap()),
         OpenFeatureValue::Struct(s) => convert_struct_to_json(s),
         OpenFeatureValue::Array(arr) => {
-            JsonValue::Array(arr.iter().map(|v| convert_to_json_value(v)).collect())
+            JsonValue::Array(arr.iter().map(convert_to_json_value).collect())
         }
     }
 }

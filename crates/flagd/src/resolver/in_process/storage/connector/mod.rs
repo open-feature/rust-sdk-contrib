@@ -3,8 +3,8 @@ pub mod grpc;
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::mpsc::Receiver;
 use tokio::sync::Mutex;
+use tokio::sync::mpsc::Receiver;
 
 #[derive(Debug)]
 pub struct QueuePayload {

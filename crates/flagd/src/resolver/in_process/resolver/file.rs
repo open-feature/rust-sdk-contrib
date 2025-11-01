@@ -1,6 +1,6 @@
 use crate::resolver::in_process::model::value_converter::ValueConverter;
 use crate::resolver::in_process::storage::connector::file::FileConnector;
-use crate::resolver::in_process::storage::{FlagStore, StorageState};
+use crate::resolver::in_process::storage::{FlagStore, StorageState, StorageStateChange};
 use crate::resolver::in_process::targeting::Operator;
 use crate::{CacheService, CacheSettings};
 use anyhow::Result;
@@ -8,6 +8,7 @@ use async_trait::async_trait;
 use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
 use open_feature::{EvaluationContext, EvaluationError, EvaluationErrorCode, StructValue, Value};
 use std::sync::Arc;
+use tokio::sync::Mutex;
 use tracing::debug;
 
 pub struct FileResolver {
@@ -15,6 +16,7 @@ pub struct FileResolver {
     operator: Operator,
     metadata: ProviderMetadata,
     cache: Option<Arc<CacheService<Value>>>,
+    state_receiver: Arc<Mutex<tokio::sync::mpsc::Receiver<StorageStateChange>>>,
 }
 impl FileResolver {
     pub async fn new(source_path: String, cache_settings: Option<CacheSettings>) -> Result<Self> {
@@ -35,12 +37,39 @@ impl FileResolver {
             return Err(anyhow::anyhow!("Timeout waiting for initial flag state"));
         }
 
+        let cache = cache_settings.map(|settings| Arc::new(CacheService::new(settings)));
+
         Ok(Self {
             store,
             operator: Operator::new(),
             metadata: ProviderMetadata::new("flagd"),
-            cache: cache_settings.map(|settings| Arc::new(CacheService::new(settings))),
+            cache,
+            state_receiver: Arc::new(Mutex::new(state_receiver)),
         })
+    }
+
+    /// Check for flag updates and clear cache if needed (non-blocking)
+    async fn check_for_updates(&self) {
+        if self.cache.is_none() {
+            return;
+        }
+
+        let mut receiver = self.state_receiver.lock().await;
+
+        // Drain all pending state changes (non-blocking)
+        let mut should_clear = false;
+        while let Ok(state_change) = receiver.try_recv() {
+            if state_change.storage_state == StorageState::Ok {
+                should_clear = true;
+            }
+        }
+
+        if should_clear {
+            debug!("Flag store updated, clearing cache");
+            if let Some(cache) = &self.cache {
+                cache.purge().await;
+            }
+        }
     }
 
     async fn resolve_value<T>(
@@ -50,13 +79,16 @@ impl FileResolver {
         value_converter: impl Fn(&serde_json::Value) -> Option<T>,
         type_name: &str,
     ) -> Result<ResolutionDetails<T>, EvaluationError> {
-        if let Some(cache) = &self.cache {
-            if let Some(cached_value) = cache.get(flag_key, context).await {
-                debug!("Cache hit for key: {}", flag_key);
-                let json_value = cached_value.to_serde_json();
-                if let Some(value) = value_converter(&json_value) {
-                    return Ok(ResolutionDetails::new(value));
-                }
+        // Check for flag updates and clear cache if needed
+        self.check_for_updates().await;
+
+        if let Some(cache) = &self.cache
+            && let Some(cached_value) = cache.get(flag_key, context).await
+        {
+            debug!("Cache hit for key: {}", flag_key);
+            let json_value = cached_value.to_serde_json();
+            if let Some(value) = value_converter(&json_value) {
+                return Ok(ResolutionDetails::new(value));
             }
         }
 
@@ -68,7 +100,7 @@ impl FileResolver {
                 return Err(EvaluationError::builder()
                     .code(EvaluationErrorCode::FlagNotFound)
                     .message(format!("Flag {} not found", flag_key))
-                    .build())
+                    .build());
             }
         };
 

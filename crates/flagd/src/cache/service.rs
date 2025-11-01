@@ -159,6 +159,9 @@ impl CacheKey {
     }
 }
 
+/// Type alias for the thread-safe cache implementation
+type SharedCache<V> = Arc<RwLock<Box<dyn Cache<CacheKey, CacheEntry<V>>>>>;
+
 /// Service managing cache operations and lifecycle
 #[derive(Debug)]
 pub struct CacheService<V>
@@ -170,7 +173,7 @@ where
     /// Time-to-live configuration for cache entries
     ttl: Option<Duration>,
     /// The underlying cache implementation
-    cache: Arc<RwLock<Box<dyn Cache<CacheKey, CacheEntry<V>>>>>,
+    cache: SharedCache<V>,
 }
 
 impl<V> CacheService<V>
@@ -218,11 +221,11 @@ where
         let mut cache = self.cache.write().await;
 
         if let Some(entry) = cache.get(&cache_key) {
-            if let Some(ttl) = self.ttl {
-                if entry.created_at.elapsed() > ttl {
-                    cache.remove(&cache_key);
-                    return None;
-                }
+            if let Some(ttl) = self.ttl
+                && entry.created_at.elapsed() > ttl
+            {
+                cache.remove(&cache_key);
+                return None;
             }
             return Some(entry.value.clone());
         }
@@ -240,6 +243,13 @@ where
             created_at: Instant::now(),
         };
         cache.add(cache_key, entry)
+    }
+
+    pub async fn purge(&self) {
+        if self.enabled {
+            let mut cache = self.cache.write().await;
+            cache.purge();
+        }
     }
 
     pub fn disable(&mut self) {

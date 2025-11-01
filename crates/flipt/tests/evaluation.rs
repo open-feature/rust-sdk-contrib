@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use mockito::Server;
 use open_feature_flipt::flipt::{Config, FliptProvider, NoneAuthentication};
-use open_feature_flipt::open_feature::{provider::FeatureProvider, EvaluationContext};
+use open_feature_flipt::open_feature::{EvaluationContext, provider::FeatureProvider};
 
 #[tokio::test]
 async fn test_boolean() {

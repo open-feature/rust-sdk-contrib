@@ -1,4 +1,4 @@
-use common::{Flagd, FLAGD_SYNC_PORT};
+use common::{FLAGD_SYNC_PORT, Flagd};
 
 use open_feature::provider::FeatureProvider;
 use open_feature::{EvaluationContext, EvaluationReason};

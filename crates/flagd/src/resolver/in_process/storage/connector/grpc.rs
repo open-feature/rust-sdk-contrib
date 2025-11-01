@@ -1,16 +1,16 @@
 use super::{Connector, QueuePayload, QueuePayloadType};
-use crate::flagd::sync::v1::{flag_sync_service_client::FlagSyncServiceClient, SyncFlagsRequest};
-use crate::resolver::common::upstream::UpstreamConfig;
 use crate::FlagdOptions;
+use crate::flagd::sync::v1::{SyncFlagsRequest, flag_sync_service_client::FlagSyncServiceClient};
+use crate::resolver::common::upstream::UpstreamConfig;
 use anyhow::{Context, Result};
 use std::str::FromStr;
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
     Arc,
+    atomic::{AtomicBool, Ordering},
 };
 use std::time::Duration;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::sync::Mutex;
+use tokio::sync::mpsc::{Receiver, Sender, channel};
 use tokio::time::sleep;
 use tonic::transport::{Channel, Uri};
 use tracing::{debug, error, warn};
@@ -210,22 +210,29 @@ impl Connector for GrpcStreamConnector {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resolver::common::upstream::UpstreamConfig;
     use crate::FlagdOptions;
+    use crate::resolver::common::upstream::UpstreamConfig;
     use serial_test::serial;
     use test_log::test;
+    use tokio::net::TcpListener;
     use tokio::time::Instant;
 
     #[test(tokio::test(flavor = "multi_thread", worker_threads = 1))]
     #[serial]
     async fn test_retry_mechanism_inprocess() {
+        // Bind to a port but don't accept connections - this causes immediate connection failures
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        // Drop the listener immediately to ensure the port rejects connections
+        drop(listener);
+
         // Create options configured for a failing connection.
         let options = FlagdOptions {
-            host: "invalid-host".to_string(),
+            host: addr.ip().to_string(),
             resolver_type: crate::ResolverType::InProcess,
-            port: 4444,
+            port: addr.port(),
             target_uri: None,
-            deadline_ms: 500,
+            deadline_ms: 100, // Short timeout for fast failures
             retry_backoff_ms: 100,
             retry_backoff_max_ms: 400,
             retry_grace_period: 3,
@@ -239,16 +246,12 @@ mod tests {
             offline_poll_interval_ms: None,
         };
 
-        let connector = GrpcStreamConnector::new(
-            "invalid-host".to_string(),
-            None,
-            &options,
-            "invalid-authority".to_string(),
-        );
+        let target = format!("{}:{}", addr.ip(), addr.port());
+        let connector =
+            GrpcStreamConnector::new(target.clone(), None, &options, "test-authority".to_string());
 
         // Create an upstream configuration with the invalid target.
-        let config = UpstreamConfig::new(connector.target.clone(), true)
-            .expect("failed to create upstream config");
+        let config = UpstreamConfig::new(target, false).expect("failed to create upstream config");
 
         let start = Instant::now();
         let result = connector.connect_with_timeout_using(&config).await;
@@ -264,10 +267,7 @@ mod tests {
             elapsed.as_millis()
         );
         assert!(
-            // This is a little flaky, it runs as expected time to time
-            // elapsed time is higher than 600ms, I assume it is either due
-            // test environment or async to serial doesn't work as expected
-            elapsed.as_millis() < 700,
+            elapsed.as_millis() < 600,
             "Elapsed time {}ms is too high",
             elapsed.as_millis()
         );

@@ -6,8 +6,8 @@ use crate::resolver::in_process::model::feature_flag::FeatureFlag;
 use crate::resolver::in_process::model::flag_parser::FlagParser;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::sync::RwLock;
+use tokio::sync::mpsc::{Receiver, Sender, channel};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum StorageState {

@@ -1,4 +1,4 @@
-use cucumber::{given, then, when, World};
+use cucumber::{World, given, then, when};
 use open_feature_flagd::{CacheSettings, CacheType, FlagdOptions, FlagdProvider, ResolverType};
 use std::collections::HashMap;
 use test_log::test;
@@ -9,6 +9,7 @@ struct ConfigWorld {
     options: FlagdOptions,
     provider: Option<FlagdProvider>,
     option_values: std::collections::HashMap<String, String>,
+    env_vars: std::collections::HashMap<String, String>,
 }
 
 impl ConfigWorld {
@@ -17,19 +18,22 @@ impl ConfigWorld {
             options: FlagdOptions::default(),
             provider: None,
             option_values: HashMap::new(),
+            env_vars: HashMap::new(),
         }
     }
 
     fn clear(&mut self) {
-        std::env::remove_var("FLAGD_OFFLINE_FLAG_SOURCE_PATH");
-        std::env::remove_var("FLAGD_RESOLVER");
-        std::env::remove_var("FLAGD_HOST");
-        std::env::remove_var("FLAGD_PORT");
-        std::env::remove_var("FLAGD_TLS");
-        std::env::remove_var("FLAGD_TARGET_URI");
-        std::env::remove_var("FLAGD_CACHE");
-        std::env::remove_var("FLAGD_MAX_CACHE_SIZE");
-        std::env::remove_var("FLAGD_OFFLINE_POLL_MS");
+        // SAFETY: Removing environment variables is safe here because:
+        // 1. We're only removing variables that were set during this specific test scenario
+        // 2. The test is protected by #[serial_test::serial]
+        // 3. This prevents test pollution between scenarios
+        // 4. All variables being removed are tracked in world.env_vars
+        for key in self.env_vars.keys() {
+            unsafe {
+                std::env::remove_var(key);
+            }
+        }
+        self.env_vars.clear();
 
         self.options = FlagdOptions::default();
         self.provider = None;
@@ -84,8 +88,20 @@ async fn option_with_value(
 }
 
 #[given(expr = r#"an environment variable {string} with value {string}"#)]
-async fn env_with_value(_world: &mut ConfigWorld, env: String, value: String) {
-    std::env::set_var(env.clone(), value.clone());
+async fn env_with_value(world: &mut ConfigWorld, env: String, value: String) {
+    // Store env var for cleanup
+    world.env_vars.insert(env.clone(), value.clone());
+
+    // SAFETY: Setting environment variables is safe here because:
+    // 1. The test function is annotated with #[serial_test::serial], ensuring no parallel execution
+    // 2. ConfigWorld::clear() is called before each scenario to clean up all env vars
+    // 3. All env vars set during the test are tracked in world.env_vars for guaranteed cleanup
+    //
+    // Note: We cannot use temp-env here because it only sets variables within a closure scope,
+    // but cucumber scenarios need variables to persist across multiple async step functions.
+    unsafe {
+        std::env::set_var(&env, &value);
+    }
 }
 
 #[when(expr = "a config was initialized")]
@@ -262,9 +278,9 @@ async fn check_option_value(
 }
 
 #[test(tokio::test)]
+#[serial_test::serial]
 async fn config_test() {
     // tracing_subscriber::fmt::init();
-
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
     let feature_path = format!("{}/flagd-testbed/gherkin/config.feature", manifest_dir);
     ConfigWorld::cucumber()

@@ -1,19 +1,19 @@
 [package]
 name = "open-feature-flipt"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-flipt = "= 1.1.1"
-open-feature = "0.2.2"
+flipt = "=1.1.1"
+open-feature = "0.2.7"
 serde_json = "1.0"
 # FIXME: openfeature-rust-sdk-contrib should export this
 async-trait = "0.1"
 # FIXME: flipt-server-side-sdk should export this
-url = "2.5.0"
+url = "2.5.7"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
-mockito = "1.4.0"
+mockito = "1.7.0"

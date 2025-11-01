@@ -2,7 +2,7 @@
 
 name = "open-feature-env-var"
 version = "0.1.1"
-edition = "2021"
+edition = "2024"
 description = "Environment Variable provider for OpenFeature"
 authors = ["Jose Bovet Derpich <jose.bovet@gmail.com>"]
 repository = "https://github.com/open-feature/rust-sdk-contrib"
@@ -14,13 +14,16 @@ keywords = ["open-feature", "feature-flag", "environment-variable"]
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-open-feature = "0.2.5"
-async-trait = "0.1.88"
+open-feature = "0.2.7"
+async-trait = "0.1.89"
 
 [dev-dependencies]
-tokio = { version = "1.47.1", features = ["full"] }
+tokio = { version = "1.48.0", features = ["full"] }
 cucumber = "0.21.1"
 futures = "0.3.31"
+test-with = { version = "0.15", features = ["runtime"] }
+libtest-with = { version = "0.8.1-10" }
+temp-env = "0.3"
 
 [[test]]
 name = "example"

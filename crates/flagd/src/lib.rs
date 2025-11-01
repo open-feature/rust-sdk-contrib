@@ -470,10 +470,10 @@ impl FlagdProvider {
         context: &EvaluationContext,
         value_converter: impl Fn(Value) -> Option<T>,
     ) -> Option<T> {
-        if let Some(cache) = &self.cache {
-            if let Some(cached_value) = cache.get(flag_key, context).await {
-                return value_converter(cached_value);
-            }
+        if let Some(cache) = &self.cache
+            && let Some(cached_value) = cache.get(flag_key, context).await
+        {
+            return value_converter(cached_value);
         }
         None
     }

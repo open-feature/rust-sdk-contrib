@@ -1,6 +1,6 @@
-use common::{Flagd, FLAGD_OFREP_PORT, FLAGD_PORT, FLAGD_SYNC_PORT};
-use open_feature::provider::FeatureProvider;
+use common::{FLAGD_OFREP_PORT, FLAGD_PORT, FLAGD_SYNC_PORT, Flagd};
 use open_feature::EvaluationContext;
+use open_feature::provider::FeatureProvider;
 use open_feature_flagd::{FlagdOptions, FlagdProvider, ResolverType};
 use std::io::Write;
 use tempfile::NamedTempFile;
