@@ -342,7 +342,9 @@ impl Default for FlagdOptions {
             provider_id: std::env::var("FLAGD_PROVIDER_ID").ok(),
         };
 
-        if options.source_configuration.is_some() && options.resolver_type != ResolverType::Rpc {
+        let resolver_env_set = std::env::var("FLAGD_RESOLVER").is_ok();
+        if options.source_configuration.is_some() && !resolver_env_set {
+            // Only override to File if FLAGD_RESOLVER wasn't explicitly set
             options.resolver_type = ResolverType::File;
         }
 

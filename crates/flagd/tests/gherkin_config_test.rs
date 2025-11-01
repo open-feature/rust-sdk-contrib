@@ -24,17 +24,24 @@ impl ConfigWorld {
 
     fn clear(&mut self) {
         // SAFETY: Removing environment variables is safe here because:
-        // 1. We're only removing variables that were set during this specific test scenario
-        // 2. The test is protected by #[serial_test::serial]
-        // 3. This prevents test pollution between scenarios
-        // 4. All variables being removed are tracked in world.env_vars
+        // 1. The test is protected by #[serial_test::serial]
+        // 2. This prevents test pollution between scenarios
+        // 3. We clear env vars that were set in previous scenarios
+        
+        // Clear env vars that were set in the previous scenario
         for key in self.env_vars.keys() {
             unsafe {
                 std::env::remove_var(key);
             }
         }
+        
+        // Also explicitly clear FLAGD_OFFLINE_FLAG_SOURCE_PATH because it can affect resolver type
+        // via FlagdOptions::default() logic, even if not tracked in world.env_vars
+        unsafe {
+            std::env::remove_var("FLAGD_OFFLINE_FLAG_SOURCE_PATH");
+        }
+        
         self.env_vars.clear();
-
         self.options = FlagdOptions::default();
         self.provider = None;
         self.option_values.clear();
@@ -110,7 +117,27 @@ async fn initialize_config(world: &mut ConfigWorld) {
     let mut options = FlagdOptions::default();
     let mut resolver_explicitly_set = false;
 
-    // Handle resolver type first - explicit options override env vars
+    // Apply env vars from world.env_vars to ensure they take precedence
+    // This handles cases where env vars were set in test steps but timing issues
+    // prevent FlagdOptions::default() from reading them correctly
+    if let Some(resolver) = world.env_vars.get("FLAGD_RESOLVER") {
+        options.resolver_type = match resolver.to_uppercase().as_str() {
+            "RPC" => ResolverType::Rpc,
+            "REST" => ResolverType::Rest,
+            "IN-PROCESS" | "INPROCESS" => ResolverType::InProcess,
+            "FILE" | "OFFLINE" => ResolverType::File,
+            _ => ResolverType::Rpc,
+        };
+        resolver_explicitly_set = true;
+        // Update port based on resolver type when set via env var
+        options.port = match options.resolver_type {
+            ResolverType::Rpc => 8013,
+            ResolverType::InProcess => 8015,
+            _ => options.port,
+        };
+    }
+
+    // Handle explicit options - these override env vars
     if let Some(resolver) = world.option_values.get("resolver") {
         options.resolver_type = match resolver.to_uppercase().as_str() {
             "RPC" => ResolverType::Rpc,
