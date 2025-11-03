@@ -366,6 +366,13 @@ impl FlagdProvider {
     pub async fn new(options: FlagdOptions) -> Result<Self, FlagdError> {
         debug!("Initializing FlagdProvider with options: {:?}", options);
 
+        // Validate File resolver configuration
+        if options.resolver_type == ResolverType::File && options.source_configuration.is_none() {
+            return Err(FlagdError::Config(
+                "File resolver requires 'source_configuration' (FLAGD_OFFLINE_FLAG_SOURCE_PATH) to be set".to_string()
+            ));
+        }
+
         let provider: Arc<dyn FeatureProvider + Send + Sync> = match options.resolver_type {
             ResolverType::Rpc => {
                 debug!("Using RPC resolver");
@@ -383,7 +390,7 @@ impl FlagdProvider {
                 debug!("Using file resolver");
                 Arc::new(
                     FileResolver::new(
-                        options.source_configuration.unwrap(),
+                        options.source_configuration.expect("source_configuration validated above"),
                         options.cache_settings.clone(),
                     )
                     .await?,
