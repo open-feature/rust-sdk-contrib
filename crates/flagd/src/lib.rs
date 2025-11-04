@@ -390,7 +390,9 @@ impl FlagdProvider {
                 debug!("Using file resolver");
                 Arc::new(
                     FileResolver::new(
-                        options.source_configuration.expect("source_configuration validated above"),
+                        options
+                            .source_configuration
+                            .expect("source_configuration validated above"),
                         options.cache_settings.clone(),
                     )
                     .await?,

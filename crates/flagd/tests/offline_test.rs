@@ -173,12 +173,16 @@ async fn test_file_resolver_requires_source_configuration() {
     })
     .await;
 
-    assert!(result.is_err(), "Expected error when source_configuration is missing");
-    
+    assert!(
+        result.is_err(),
+        "Expected error when source_configuration is missing"
+    );
+
     let err = result.unwrap_err();
     let err_msg = format!("{}", err);
     assert!(
-        err_msg.contains("source_configuration") || err_msg.contains("FLAGD_OFFLINE_FLAG_SOURCE_PATH"),
+        err_msg.contains("source_configuration")
+            || err_msg.contains("FLAGD_OFFLINE_FLAG_SOURCE_PATH"),
         "Error message should mention source_configuration or FLAGD_OFFLINE_FLAG_SOURCE_PATH, got: {}",
         err_msg
     );
