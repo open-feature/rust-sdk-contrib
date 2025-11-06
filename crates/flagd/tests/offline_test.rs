@@ -162,3 +162,28 @@ async fn test_file_resolver_all_types() {
         Value::String("value".to_string())
     );
 }
+
+#[test(tokio::test)]
+async fn test_file_resolver_requires_source_configuration() {
+    // Test that File resolver without source_configuration returns proper error
+    let result = FlagdProvider::new(FlagdOptions {
+        resolver_type: ResolverType::File,
+        source_configuration: None, // Missing required configuration
+        ..Default::default()
+    })
+    .await;
+
+    assert!(
+        result.is_err(),
+        "Expected error when source_configuration is missing"
+    );
+
+    let err = result.unwrap_err();
+    let err_msg = format!("{}", err);
+    assert!(
+        err_msg.contains("source_configuration")
+            || err_msg.contains("FLAGD_OFFLINE_FLAG_SOURCE_PATH"),
+        "Error message should mention source_configuration or FLAGD_OFFLINE_FLAG_SOURCE_PATH, got: {}",
+        err_msg
+    );
+}

@@ -28,7 +28,8 @@ pub struct GrpcStreamConnector {
     retry_backoff_max_ms: u32,
     retry_grace_period: u32,
     stream_deadline_ms: u32,
-    authority: String, // desired authority, e.g. "b-features-api.service"
+    authority: String,   // desired authority, e.g. "b-features-api.service"
+    provider_id: String, // provider identifier for sync requests
 }
 
 impl GrpcStreamConnector {
@@ -52,6 +53,10 @@ impl GrpcStreamConnector {
             retry_grace_period: options.retry_grace_period,
             stream_deadline_ms: options.stream_deadline_ms,
             authority,
+            provider_id: options
+                .provider_id
+                .clone()
+                .unwrap_or_else(|| "rust-flagd-provider".to_string()),
         }
     }
 
@@ -119,7 +124,7 @@ impl GrpcStreamConnector {
         // Create the gRPC client with no interceptor because the endpoint already carries the desired authority.
         let mut client = FlagSyncServiceClient::new(channel);
         let request = tonic::Request::new(SyncFlagsRequest {
-            provider_id: "rust-flagd-provider".to_string(),
+            provider_id: self.provider_id.clone(),
             selector: self.selector.clone().unwrap_or_default(),
         });
         debug!("Sending sync request with selector: {:?}", self.selector);
@@ -227,24 +232,17 @@ mod tests {
         drop(listener);
 
         // Create options configured for a failing connection.
-        let options = FlagdOptions {
-            host: addr.ip().to_string(),
-            resolver_type: crate::ResolverType::InProcess,
-            port: addr.port(),
-            target_uri: None,
-            deadline_ms: 100, // Short timeout for fast failures
-            retry_backoff_ms: 100,
-            retry_backoff_max_ms: 400,
-            retry_grace_period: 3,
-            stream_deadline_ms: 500,
-            tls: false,
-            cert_path: None,
-            selector: None,
-            socket_path: None,
-            cache_settings: None,
-            source_configuration: None,
-            offline_poll_interval_ms: None,
-        };
+        let mut options = FlagdOptions::default();
+        options.host = addr.ip().to_string();
+        options.resolver_type = crate::ResolverType::InProcess;
+        options.port = addr.port();
+        options.deadline_ms = 100; // Short timeout for fast failures
+        options.retry_backoff_ms = 100;
+        options.retry_backoff_max_ms = 400;
+        options.retry_grace_period = 3;
+        options.stream_deadline_ms = 500;
+        options.tls = false;
+        options.cache_settings = None;
 
         let target = format!("{}:{}", addr.ip(), addr.port());
         let connector =

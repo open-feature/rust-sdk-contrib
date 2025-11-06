@@ -261,6 +261,9 @@ pub struct FlagdOptions {
     pub stream_deadline_ms: u32,
     /// Offline polling interval in milliseconds
     pub offline_poll_interval_ms: Option<u32>,
+    /// Provider ID for identifying this provider instance to flagd
+    /// Used in in-process resolver for sync requests
+    pub provider_id: Option<String>,
 }
 /// Type of resolver to use for flag evaluation
 #[derive(Debug, Clone, PartialEq)]
@@ -336,9 +339,12 @@ impl Default for FlagdOptions {
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(5000),
             ),
+            provider_id: std::env::var("FLAGD_PROVIDER_ID").ok(),
         };
 
-        if options.source_configuration.is_some() && options.resolver_type != ResolverType::Rpc {
+        let resolver_env_set = std::env::var("FLAGD_RESOLVER").is_ok();
+        if options.source_configuration.is_some() && !resolver_env_set {
+            // Only override to File if FLAGD_RESOLVER wasn't explicitly set
             options.resolver_type = ResolverType::File;
         }
 
@@ -360,6 +366,13 @@ impl FlagdProvider {
     pub async fn new(options: FlagdOptions) -> Result<Self, FlagdError> {
         debug!("Initializing FlagdProvider with options: {:?}", options);
 
+        // Validate File resolver configuration
+        if options.resolver_type == ResolverType::File && options.source_configuration.is_none() {
+            return Err(FlagdError::Config(
+                "File resolver requires 'source_configuration' (FLAGD_OFFLINE_FLAG_SOURCE_PATH) to be set".to_string()
+            ));
+        }
+
         let provider: Arc<dyn FeatureProvider + Send + Sync> = match options.resolver_type {
             ResolverType::Rpc => {
                 debug!("Using RPC resolver");
@@ -377,7 +390,9 @@ impl FlagdProvider {
                 debug!("Using file resolver");
                 Arc::new(
                     FileResolver::new(
-                        options.source_configuration.unwrap(),
+                        options
+                            .source_configuration
+                            .expect("source_configuration validated above"),
                         options.cache_settings.clone(),
                     )
                     .await?,

@@ -85,6 +85,27 @@ fn convert_proto_metadata(metadata: prost_types::Struct) -> FlagMetadata {
     FlagMetadata { values }
 }
 
+/// Maps gRPC status codes to OpenFeature error codes
+///
+/// This ensures consistent error handling across different resolver types
+/// and proper conformance with the OpenFeature specification.
+fn map_grpc_status_to_error_code(status: &tonic::Status) -> EvaluationErrorCode {
+    use tonic::Code;
+    match status.code() {
+        Code::NotFound => EvaluationErrorCode::FlagNotFound,
+        Code::InvalidArgument => EvaluationErrorCode::InvalidContext,
+        Code::Unauthenticated | Code::PermissionDenied => {
+            EvaluationErrorCode::General("authentication/authorization error".to_string())
+        }
+        Code::FailedPrecondition => EvaluationErrorCode::TypeMismatch,
+        Code::DeadlineExceeded | Code::Cancelled => {
+            EvaluationErrorCode::General("request timeout or cancelled".to_string())
+        }
+        Code::Unavailable => EvaluationErrorCode::General("service unavailable".to_string()),
+        _ => EvaluationErrorCode::General(format!("{:?}", status.code())),
+    }
+}
+
 pub struct RpcResolver {
     client: ClientType,
     metadata: OnceLock<ProviderMetadata>,
@@ -214,7 +235,7 @@ impl FeatureProvider for RpcResolver {
             Err(status) => {
                 error!(flag_key, error = %status, "failed to resolve boolean flag");
                 Err(EvaluationError {
-                    code: EvaluationErrorCode::General(status.code().to_string()),
+                    code: map_grpc_status_to_error_code(&status),
                     message: Some(status.message().to_string()),
                 })
             }
@@ -247,7 +268,7 @@ impl FeatureProvider for RpcResolver {
             Err(status) => {
                 error!(flag_key, error = %status, "failed to resolve string flag");
                 Err(EvaluationError {
-                    code: EvaluationErrorCode::General(status.code().to_string()),
+                    code: map_grpc_status_to_error_code(&status),
                     message: Some(status.message().to_string()),
                 })
             }
@@ -280,7 +301,7 @@ impl FeatureProvider for RpcResolver {
             Err(status) => {
                 error!(flag_key, error = %status, "failed to resolve float flag");
                 Err(EvaluationError {
-                    code: EvaluationErrorCode::General(status.code().to_string()),
+                    code: map_grpc_status_to_error_code(&status),
                     message: Some(status.message().to_string()),
                 })
             }
@@ -313,7 +334,7 @@ impl FeatureProvider for RpcResolver {
             Err(status) => {
                 error!(flag_key, error = %status, "failed to resolve integer flag");
                 Err(EvaluationError {
-                    code: EvaluationErrorCode::General(status.code().to_string()),
+                    code: map_grpc_status_to_error_code(&status),
                     message: Some(status.message().to_string()),
                 })
             }
@@ -346,7 +367,7 @@ impl FeatureProvider for RpcResolver {
             Err(status) => {
                 error!(flag_key, error = %status, "failed to resolve struct flag");
                 Err(EvaluationError {
-                    code: EvaluationErrorCode::General(status.code().to_string()),
+                    code: map_grpc_status_to_error_code(&status),
                     message: Some(status.message().to_string()),
                 })
             }
@@ -764,5 +785,45 @@ mod tests {
 
         // Clean shutdown
         server_handle.abort();
+    }
+
+    #[test]
+    fn test_grpc_error_code_mapping() {
+        use tonic::Code;
+
+        // Test NOT_FOUND -> FlagNotFound
+        let status = tonic::Status::new(Code::NotFound, "Flag not found");
+        let error_code = map_grpc_status_to_error_code(&status);
+        assert!(matches!(error_code, EvaluationErrorCode::FlagNotFound));
+
+        // Test INVALID_ARGUMENT -> InvalidContext
+        let status = tonic::Status::new(Code::InvalidArgument, "Invalid context");
+        let error_code = map_grpc_status_to_error_code(&status);
+        assert!(matches!(error_code, EvaluationErrorCode::InvalidContext));
+
+        // Test UNAUTHENTICATED -> General
+        let status = tonic::Status::new(Code::Unauthenticated, "Not authenticated");
+        let error_code = map_grpc_status_to_error_code(&status);
+        assert!(matches!(error_code, EvaluationErrorCode::General(_)));
+
+        // Test PERMISSION_DENIED -> General
+        let status = tonic::Status::new(Code::PermissionDenied, "Access denied");
+        let error_code = map_grpc_status_to_error_code(&status);
+        assert!(matches!(error_code, EvaluationErrorCode::General(_)));
+
+        // Test FAILED_PRECONDITION -> TypeMismatch
+        let status = tonic::Status::new(Code::FailedPrecondition, "Type mismatch");
+        let error_code = map_grpc_status_to_error_code(&status);
+        assert!(matches!(error_code, EvaluationErrorCode::TypeMismatch));
+
+        // Test DEADLINE_EXCEEDED -> General
+        let status = tonic::Status::new(Code::DeadlineExceeded, "Timeout");
+        let error_code = map_grpc_status_to_error_code(&status);
+        assert!(matches!(error_code, EvaluationErrorCode::General(_)));
+
+        // Test UNAVAILABLE -> General
+        let status = tonic::Status::new(Code::Unavailable, "Service unavailable");
+        let error_code = map_grpc_status_to_error_code(&status);
+        assert!(matches!(error_code, EvaluationErrorCode::General(_)));
     }
 }
