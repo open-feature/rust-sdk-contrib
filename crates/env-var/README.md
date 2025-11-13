@@ -43,6 +43,17 @@ if is_feature_enabled {
 }
 ```
 
+The environment variable names can be customized by injecting a custom `Rename` implementation:
+
+```rust
+/// Transforms env-flag-key to ENV_FLAG_KEY
+fn underscore(flag_key: &str) -> Cow<'_, str> {
+    flag_key.replace("-", "_").to_uppercase().into()
+}
+
+let provider  = EnvVarProvider::new(underscore);
+```
+
 ## Testing
 
 Run `cargo test` to execute tests.
