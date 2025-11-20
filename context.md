@@ -2,7 +2,7 @@
 
 **Repository**: https://github.com/open-feature/rust-sdk-contrib
 **Purpose**: OpenFeature provider implementations for Rust
-**Last Updated**: 2025-11-19
+**Last Updated**: 2025-11-20
 
 ---
 
@@ -17,6 +17,7 @@ rust-sdk-contrib/
 ├── crates/
 │   ├── env-var/          # Environment variable provider
 │   ├── flagd/            # flagd provider (comprehensive reference)
+│   ├── flagsmith/        # Flagsmith provider
 │   ├── flipt/            # Flipt provider (simpler reference)
 │   └── ofrep/            # OFREP provider (HTTP-based reference)
 ├── Cargo.toml            # Workspace definition
@@ -35,6 +36,7 @@ The root `Cargo.toml` defines a workspace with all provider crates as members:
 members = [
     "crates/env-var",
     "crates/flagd",
+    "crates/flagsmith",
     "crates/flipt",
     "crates/ofrep"
 ]
@@ -742,6 +744,7 @@ mockito = "1.0"  # Optional, for HTTP mocking
 
 - **Contributing Guide**: `CONTRIBUTING.md`
 - **flagd Provider** (comprehensive): `crates/flagd/`
+- **Flagsmith Provider**: `crates/flagsmith/`
 - **OFREP Provider** (HTTP-based): `crates/ofrep/`
 - **Flipt Provider** (simple): `crates/flipt/`
 - **env-var Provider** (basic): `crates/env-var/`
@@ -778,5 +781,5 @@ When creating a new provider:
 
 ---
 
-**Last Updated**: 2025-11-19
+**Last Updated**: 2025-11-20
 **Maintainers**: OpenFeature Contributors
