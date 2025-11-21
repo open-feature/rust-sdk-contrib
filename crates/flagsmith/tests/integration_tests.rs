@@ -291,6 +291,36 @@ async fn test_resolve_struct_value() {
 }
 
 #[tokio::test]
+async fn test_resolve_struct_value_type_mismatch() {
+    // Test that resolve_struct_value rejects non-String types
+    let flags = create_mock_flags(vec![(
+        "int-flag",
+        FlagsmithValue {
+            value: "42".to_string(),
+            value_type: FlagsmithValueType::Integer,
+        },
+        true,
+    )]);
+
+    let mock_client = MockFlagsmithClient::new().with_environment_flags(flags);
+    let provider = FlagsmithProvider::from_client(Arc::new(mock_client));
+
+    let context = EvaluationContext::default();
+    let result = provider.resolve_struct_value("int-flag", &context).await;
+
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    assert_eq!(
+        error.code,
+        open_feature::EvaluationErrorCode::TypeMismatch
+    );
+    assert!(error
+        .message
+        .unwrap()
+        .contains("Expected string type for JSON"));
+}
+
+#[tokio::test]
 async fn test_resolve_flag_not_found() {
     let flags = create_mock_flags(vec![]);
 

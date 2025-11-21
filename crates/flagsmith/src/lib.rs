@@ -253,11 +253,15 @@ impl FlagsmithProvider {
 
         // Initialize Flagsmith client
         // Use spawn_blocking because Flagsmith::new() creates threads and can conflict with tokio runtime
-        let client = tokio::task::spawn_blocking(move || Flagsmith::new(environment_key, sdk_options))
-            .await
-            .map_err(|e| {
-                error::FlagsmithError::Config(format!("Failed to initialize Flagsmith client: {}", e))
-            })?;
+        let client =
+            tokio::task::spawn_blocking(move || Flagsmith::new(environment_key, sdk_options))
+                .await
+                .map_err(|e| {
+                    error::FlagsmithError::Config(format!(
+                        "Failed to initialize Flagsmith client: {}",
+                        e
+                    ))
+                })?;
 
         Ok(Self::from_client(Arc::new(client)))
     }
@@ -393,18 +397,17 @@ impl FeatureProvider for FlagsmithProvider {
         // Flagsmith stores all values as strings, so we try to parse regardless of value_type
         // First check the declared type, then fall back to attempting string parsing
         let value = match flag.value.value_type {
-            FlagsmithValueType::Integer | FlagsmithValueType::String => {
-                flag.value
-                    .value
-                    .parse::<i64>()
-                    .map_err(|e| EvaluationError {
-                        code: open_feature::EvaluationErrorCode::TypeMismatch,
-                        message: Some(format!(
-                            "Failed to parse integer value '{}': {}",
-                            flag.value.value, e
-                        )),
-                    })?
-            }
+            FlagsmithValueType::Integer | FlagsmithValueType::String => flag
+                .value
+                .value
+                .parse::<i64>()
+                .map_err(|e| EvaluationError {
+                    code: open_feature::EvaluationErrorCode::TypeMismatch,
+                    message: Some(format!(
+                        "Failed to parse integer value '{}': {}",
+                        flag.value.value, e
+                    )),
+                })?,
             _ => {
                 return Err(EvaluationError {
                     code: open_feature::EvaluationErrorCode::TypeMismatch,
@@ -442,18 +445,17 @@ impl FeatureProvider for FlagsmithProvider {
         // Flagsmith stores all values as strings, so we try to parse regardless of value_type
         // First check the declared type, then fall back to attempting string parsing
         let value = match flag.value.value_type {
-            FlagsmithValueType::Float | FlagsmithValueType::String => {
-                flag.value
-                    .value
-                    .parse::<f64>()
-                    .map_err(|e| EvaluationError {
-                        code: open_feature::EvaluationErrorCode::TypeMismatch,
-                        message: Some(format!(
-                            "Failed to parse float value '{}': {}",
-                            flag.value.value, e
-                        )),
-                    })?
-            }
+            FlagsmithValueType::Float | FlagsmithValueType::String => flag
+                .value
+                .value
+                .parse::<f64>()
+                .map_err(|e| EvaluationError {
+                    code: open_feature::EvaluationErrorCode::TypeMismatch,
+                    message: Some(format!(
+                        "Failed to parse float value '{}': {}",
+                        flag.value.value, e
+                    )),
+                })?,
             _ => {
                 return Err(EvaluationError {
                     code: open_feature::EvaluationErrorCode::TypeMismatch,
@@ -487,6 +489,16 @@ impl FeatureProvider for FlagsmithProvider {
         let flags = self.get_flags(context).await?;
 
         let flag = flags.get_flag(flag_key).map_err(FlagsmithError::from)?;
+
+        if !matches!(flag.value.value_type, FlagsmithValueType::String) {
+            return Err(EvaluationError {
+                code: open_feature::EvaluationErrorCode::TypeMismatch,
+                message: Some(format!(
+                    "Expected string type for JSON, but flag '{}' has type {:?}",
+                    flag_key, flag.value.value_type
+                )),
+            });
+        }
 
         let json_value: JsonValue =
             serde_json::from_str(&flag.value.value).map_err(|e| EvaluationError {

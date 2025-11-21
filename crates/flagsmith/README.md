@@ -72,6 +72,9 @@ let enabled = client
 ## Flag Types
 
 ```rust
+// Assuming you have set up the client as shown in the Basic Usage section
+let context = EvaluationContext::default();
+
 // Boolean flags
 let enabled = client.get_bool_value("feature-toggle", &context, None).await.unwrap();
 
@@ -86,6 +89,8 @@ let multiplier = client.get_float_value("price-multiplier", &context, None).awai
 
 // Structured flags (JSON objects)
 let config = client.get_object_value("config", &context, None).await.unwrap();
+```
+
 ## Local Evaluation
 
 Local evaluation mode downloads the environment configuration and evaluates flags locally for better performance:
