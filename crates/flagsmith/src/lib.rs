@@ -266,6 +266,45 @@ impl FlagsmithProvider {
             client,
         }
     }
+
+    /// Fetches flags from the Flagsmith client.
+    ///
+    /// This helper function handles both environment-level and identity-specific flag fetching
+    /// based on whether a targeting key is present in the evaluation context.
+    ///
+    /// # Arguments
+    ///
+    /// * `context` - The evaluation context containing targeting information
+    ///
+    /// # Returns
+    ///
+    /// Returns the flags object from Flagsmith, or an evaluation error if the operation fails.
+    async fn get_flags(
+        &self,
+        context: &EvaluationContext,
+    ) -> Result<flagsmith::flagsmith::models::Flags, EvaluationError> {
+        let client = Arc::clone(&self.client);
+        let targeting_key = context.targeting_key.clone();
+        let traits = if targeting_key.is_some() {
+            Some(context_to_traits(context))
+        } else {
+            None
+        };
+
+        Ok(tokio::task::spawn_blocking(move || {
+            if let Some(key) = targeting_key {
+                client.get_identity_flags(&key, traits, None)
+            } else {
+                client.get_environment_flags()
+            }
+        })
+        .await
+        .map_err(|e| EvaluationError {
+            code: open_feature::EvaluationErrorCode::General("Task execution error".to_string()),
+            message: Some(format!("Failed to execute blocking task: {}", e)),
+        })?
+        .map_err(FlagsmithError::from)?)
+    }
 }
 
 #[async_trait]
@@ -283,31 +322,10 @@ impl FeatureProvider for FlagsmithProvider {
         validate_flag_key(flag_key)?;
         debug!("Resolving boolean flag: {}", flag_key);
 
-        let client = Arc::clone(&self.client);
-        let targeting_key = context.targeting_key.clone();
-        let traits = if targeting_key.is_some() {
-            Some(context_to_traits(context))
-        } else {
-            None
-        };
-        let flag_key_owned = flag_key.to_string();
-
-        let flags = tokio::task::spawn_blocking(move || {
-            if let Some(key) = targeting_key {
-                client.get_identity_flags(&key, traits, None)
-            } else {
-                client.get_environment_flags()
-            }
-        })
-        .await
-        .map_err(|e| EvaluationError {
-            code: open_feature::EvaluationErrorCode::General("Task execution error".to_string()),
-            message: Some(format!("Failed to execute blocking task: {}", e)),
-        })?
-        .map_err(FlagsmithError::from)?;
+        let flags = self.get_flags(context).await?;
 
         let enabled = flags
-            .is_feature_enabled(&flag_key_owned)
+            .is_feature_enabled(flag_key)
             .map_err(FlagsmithError::from)?;
 
         let reason = determine_reason(context, enabled);
@@ -329,31 +347,10 @@ impl FeatureProvider for FlagsmithProvider {
         validate_flag_key(flag_key)?;
         debug!("Resolving string flag: {}", flag_key);
 
-        let client = Arc::clone(&self.client);
-        let targeting_key = context.targeting_key.clone();
-        let traits = if targeting_key.is_some() {
-            Some(context_to_traits(context))
-        } else {
-            None
-        };
-        let flag_key_owned = flag_key.to_string();
-
-        let flags = tokio::task::spawn_blocking(move || {
-            if let Some(key) = targeting_key {
-                client.get_identity_flags(&key, traits, None)
-            } else {
-                client.get_environment_flags()
-            }
-        })
-        .await
-        .map_err(|e| EvaluationError {
-            code: open_feature::EvaluationErrorCode::General("Task execution error".to_string()),
-            message: Some(format!("Failed to execute blocking task: {}", e)),
-        })?
-        .map_err(FlagsmithError::from)?;
+        let flags = self.get_flags(context).await?;
 
         let flag = flags
-            .get_flag(&flag_key_owned)
+            .get_flag(flag_key)
             .map_err(FlagsmithError::from)?;
 
         if !matches!(flag.value.value_type, FlagsmithValueType::String) {
@@ -361,7 +358,7 @@ impl FeatureProvider for FlagsmithProvider {
                 code: open_feature::EvaluationErrorCode::TypeMismatch,
                 message: Some(format!(
                     "Expected string type, but flag '{}' has type {:?}",
-                    flag_key_owned, flag.value.value_type
+                    flag_key, flag.value.value_type
                 )),
             });
         }
@@ -386,31 +383,10 @@ impl FeatureProvider for FlagsmithProvider {
         validate_flag_key(flag_key)?;
         debug!("Resolving integer flag: {}", flag_key);
 
-        let client = Arc::clone(&self.client);
-        let targeting_key = context.targeting_key.clone();
-        let traits = if targeting_key.is_some() {
-            Some(context_to_traits(context))
-        } else {
-            None
-        };
-        let flag_key_owned = flag_key.to_string();
-
-        let flags = tokio::task::spawn_blocking(move || {
-            if let Some(key) = targeting_key {
-                client.get_identity_flags(&key, traits, None)
-            } else {
-                client.get_environment_flags()
-            }
-        })
-        .await
-        .map_err(|e| EvaluationError {
-            code: open_feature::EvaluationErrorCode::General("Task execution error".to_string()),
-            message: Some(format!("Failed to execute blocking task: {}", e)),
-        })?
-        .map_err(FlagsmithError::from)?;
+        let flags = self.get_flags(context).await?;
 
         let flag = flags
-            .get_flag(&flag_key_owned)
+            .get_flag(flag_key)
             .map_err(FlagsmithError::from)?;
 
         let value = match flag.value.value_type {
@@ -456,31 +432,10 @@ impl FeatureProvider for FlagsmithProvider {
         validate_flag_key(flag_key)?;
         debug!("Resolving float flag: {}", flag_key);
 
-        let client = Arc::clone(&self.client);
-        let targeting_key = context.targeting_key.clone();
-        let traits = if targeting_key.is_some() {
-            Some(context_to_traits(context))
-        } else {
-            None
-        };
-        let flag_key_owned = flag_key.to_string();
-
-        let flags = tokio::task::spawn_blocking(move || {
-            if let Some(key) = targeting_key {
-                client.get_identity_flags(&key, traits, None)
-            } else {
-                client.get_environment_flags()
-            }
-        })
-        .await
-        .map_err(|e| EvaluationError {
-            code: open_feature::EvaluationErrorCode::General("Task execution error".to_string()),
-            message: Some(format!("Failed to execute blocking task: {}", e)),
-        })?
-        .map_err(FlagsmithError::from)?;
+        let flags = self.get_flags(context).await?;
 
         let flag = flags
-            .get_flag(&flag_key_owned)
+            .get_flag(flag_key)
             .map_err(FlagsmithError::from)?;
 
         let value = match flag.value.value_type {
@@ -526,31 +481,10 @@ impl FeatureProvider for FlagsmithProvider {
         validate_flag_key(flag_key)?;
         debug!("Resolving struct flag: {}", flag_key);
 
-        let client = Arc::clone(&self.client);
-        let targeting_key = context.targeting_key.clone();
-        let traits = if targeting_key.is_some() {
-            Some(context_to_traits(context))
-        } else {
-            None
-        };
-        let flag_key_owned = flag_key.to_string();
-
-        let flags = tokio::task::spawn_blocking(move || {
-            if let Some(key) = targeting_key {
-                client.get_identity_flags(&key, traits, None)
-            } else {
-                client.get_environment_flags()
-            }
-        })
-        .await
-        .map_err(|e| EvaluationError {
-            code: open_feature::EvaluationErrorCode::General("Task execution error".to_string()),
-            message: Some(format!("Failed to execute blocking task: {}", e)),
-        })?
-        .map_err(FlagsmithError::from)?;
+        let flags = self.get_flags(context).await?;
 
         let flag = flags
-            .get_flag(&flag_key_owned)
+            .get_flag(flag_key)
             .map_err(FlagsmithError::from)?;
 
         let json_value: JsonValue =
