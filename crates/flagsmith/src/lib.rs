@@ -560,39 +560,45 @@ fn validate_flag_key(flag_key: &str) -> Result<(), EvaluationError> {
 ///
 /// Maps custom_fields from the context into Flagsmith trait format,
 /// converting each field value to the appropriate Flagsmith type.
+///
+/// Note: Struct fields are not supported by Flagsmith traits and will be
+/// filtered out with a warning logged.
 fn context_to_traits(context: &EvaluationContext) -> Vec<flagsmith::flagsmith::models::SDKTrait> {
     context
         .custom_fields
         .iter()
-        .map(|(key, value)| {
+        .filter_map(|(key, value)| {
             let flagsmith_value = match value {
-                EvaluationContextFieldValue::Bool(b) => FlagsmithValue {
+                EvaluationContextFieldValue::Bool(b) => Some(FlagsmithValue {
                     value: b.to_string(),
                     value_type: FlagsmithValueType::Bool,
-                },
-                EvaluationContextFieldValue::String(s) => FlagsmithValue {
+                }),
+                EvaluationContextFieldValue::String(s) => Some(FlagsmithValue {
                     value: s.clone(),
                     value_type: FlagsmithValueType::String,
-                },
-                EvaluationContextFieldValue::Int(i) => FlagsmithValue {
+                }),
+                EvaluationContextFieldValue::Int(i) => Some(FlagsmithValue {
                     value: i.to_string(),
                     value_type: FlagsmithValueType::Integer,
-                },
-                EvaluationContextFieldValue::Float(f) => FlagsmithValue {
+                }),
+                EvaluationContextFieldValue::Float(f) => Some(FlagsmithValue {
                     value: f.to_string(),
                     value_type: FlagsmithValueType::Float,
-                },
-                EvaluationContextFieldValue::DateTime(dt) => FlagsmithValue {
+                }),
+                EvaluationContextFieldValue::DateTime(dt) => Some(FlagsmithValue {
                     value: dt.to_string(),
                     value_type: FlagsmithValueType::String,
-                },
-                EvaluationContextFieldValue::Struct(_) => FlagsmithValue {
-                    value: String::new(),
-                    value_type: FlagsmithValueType::String,
-                },
+                }),
+                EvaluationContextFieldValue::Struct(_) => {
+                    tracing::warn!(
+                        "Trait '{}': Struct values in evaluation context are not supported as Flagsmith traits and will be ignored.",
+                        key
+                    );
+                    None
+                }
             };
 
-            flagsmith::flagsmith::models::SDKTrait::new(key.clone(), flagsmith_value)
+            flagsmith_value.map(|fv| flagsmith::flagsmith::models::SDKTrait::new(key.clone(), fv))
         })
         .collect()
 }
@@ -664,6 +670,34 @@ mod tests {
         assert!(trait_keys.contains(&"age".to_string()));
         assert!(trait_keys.contains(&"premium".to_string()));
         assert!(trait_keys.contains(&"score".to_string()));
+    }
+
+    #[test]
+    fn test_context_to_traits_filters_struct_fields() {
+        use std::collections::HashMap;
+        use std::sync::Arc;
+
+        let mut struct_fields = HashMap::new();
+        struct_fields.insert("nested_field".to_string(), Value::String("value".to_string()));
+        let struct_value = StructValue { fields: struct_fields };
+
+        let mut context = EvaluationContext::default()
+            .with_custom_field("email", "user@example.com")
+            .with_custom_field("age", 25);
+
+        context.custom_fields.insert(
+            "metadata".to_string(),
+            EvaluationContextFieldValue::Struct(Arc::new(struct_value)),
+        );
+
+        let traits = context_to_traits(&context);
+
+        assert_eq!(traits.len(), 2);
+
+        let trait_keys: Vec<String> = traits.iter().map(|t| t.trait_key.clone()).collect();
+        assert!(trait_keys.contains(&"email".to_string()));
+        assert!(trait_keys.contains(&"age".to_string()));
+        assert!(!trait_keys.contains(&"metadata".to_string()));
     }
 
     #[test]
