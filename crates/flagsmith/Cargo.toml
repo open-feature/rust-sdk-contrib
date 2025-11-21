@@ -2,7 +2,7 @@
 name = "open-feature-flagsmith"
 version = "0.1.0"
 authors = ["OpenFeature Maintainers"]
-edition = "2021"
+edition = "2024"
 license = "Apache-2.0"
 description = "Flagsmith provider for OpenFeature"
 homepage = "https://openfeature.dev"
