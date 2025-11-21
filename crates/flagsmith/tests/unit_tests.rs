@@ -1,6 +1,8 @@
 use flagsmith::{Flagsmith, FlagsmithOptions as FlagsmithSDKOptions};
 use open_feature::provider::FeatureProvider;
-use open_feature::{EvaluationContext, EvaluationContextFieldValue, EvaluationReason as Reason, StructValue, Value};
+use open_feature::{
+    EvaluationContext, EvaluationContextFieldValue, EvaluationReason as Reason, StructValue, Value,
+};
 use open_feature_flagsmith::{FlagsmithError, FlagsmithProvider};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -60,8 +62,13 @@ fn test_context_to_traits() {
 #[test]
 fn test_context_to_traits_filters_struct_fields() {
     let mut struct_fields = HashMap::new();
-    struct_fields.insert("nested_field".to_string(), Value::String("value".to_string()));
-    let struct_value = StructValue { fields: struct_fields };
+    struct_fields.insert(
+        "nested_field".to_string(),
+        Value::String("value".to_string()),
+    );
+    let struct_value = StructValue {
+        fields: struct_fields,
+    };
 
     let mut context = EvaluationContext::default()
         .with_custom_field("email", "user@example.com")

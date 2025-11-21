@@ -563,7 +563,9 @@ pub fn validate_flag_key(flag_key: &str) -> Result<(), EvaluationError> {
 ///
 /// Note: Struct fields are not supported by Flagsmith traits and will be
 /// filtered out with a warning logged.
-pub fn context_to_traits(context: &EvaluationContext) -> Vec<flagsmith::flagsmith::models::SDKTrait> {
+pub fn context_to_traits(
+    context: &EvaluationContext,
+) -> Vec<flagsmith::flagsmith::models::SDKTrait> {
     context
         .custom_fields
         .iter()
