@@ -19,7 +19,7 @@ open-feature = "0.2"
 flagsmith = "2.0"
 
 # Async runtime
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 async-trait = "0.1"
 
 # Error handling
