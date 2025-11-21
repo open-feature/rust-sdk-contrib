@@ -252,7 +252,12 @@ impl FlagsmithProvider {
         }
 
         // Initialize Flagsmith client
-        let client = Flagsmith::new(environment_key, sdk_options);
+        // Use spawn_blocking because Flagsmith::new() creates threads and can conflict with tokio runtime
+        let client = tokio::task::spawn_blocking(move || Flagsmith::new(environment_key, sdk_options))
+            .await
+            .map_err(|e| {
+                error::FlagsmithError::Config(format!("Failed to initialize Flagsmith client: {}", e))
+            })?;
 
         Ok(Self::from_client(Arc::new(client)))
     }
@@ -385,8 +390,10 @@ impl FeatureProvider for FlagsmithProvider {
 
         let flag = flags.get_flag(flag_key).map_err(FlagsmithError::from)?;
 
+        // Flagsmith stores all values as strings, so we try to parse regardless of value_type
+        // First check the declared type, then fall back to attempting string parsing
         let value = match flag.value.value_type {
-            FlagsmithValueType::Integer => {
+            FlagsmithValueType::Integer | FlagsmithValueType::String => {
                 flag.value
                     .value
                     .parse::<i64>()
@@ -432,8 +439,10 @@ impl FeatureProvider for FlagsmithProvider {
 
         let flag = flags.get_flag(flag_key).map_err(FlagsmithError::from)?;
 
+        // Flagsmith stores all values as strings, so we try to parse regardless of value_type
+        // First check the declared type, then fall back to attempting string parsing
         let value = match flag.value.value_type {
-            FlagsmithValueType::Float => {
+            FlagsmithValueType::Float | FlagsmithValueType::String => {
                 flag.value
                     .value
                     .parse::<f64>()
