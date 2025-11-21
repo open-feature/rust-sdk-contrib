@@ -73,20 +73,19 @@ let enabled = client
 
 ```rust
 // Boolean flags
-let enabled = client.get_bool_value("feature-toggle", &context, None).await?;
+let enabled = client.get_bool_value("feature-toggle", &context, None).await.unwrap();
 
 // String flags
-let theme = client.get_string_value("theme", &context, None).await?;
+let theme = client.get_string_value("theme", &context, None).await.unwrap();
 
 // Integer flags
-let max_items = client.get_int_value("max-items", &context, None).await?;
+let max_items = client.get_int_value("max-items", &context, None).await.unwrap();
 
 // Float flags
-let multiplier = client.get_float_value("price-multiplier", &context, None).await?;
+let multiplier = client.get_float_value("price-multiplier", &context, None).await.unwrap();
 
 // Structured flags (JSON objects)
-let config = client.get_object_value("config", &context, None).await?;
-```
+let config = client.get_object_value("config", &context, None).await.unwrap();
 
 ## Local Evaluation
 
