@@ -48,10 +48,9 @@
 //! }
 //! ```
 
-mod error;
+pub mod error;
 
 use async_trait::async_trait;
-use error::FlagsmithError;
 use flagsmith::{Flagsmith, FlagsmithOptions as FlagsmithSDKOptions};
 use flagsmith_flag_engine::types::{FlagsmithValue, FlagsmithValueType};
 use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
@@ -65,6 +64,7 @@ use std::sync::Arc;
 use tracing::{debug, instrument};
 
 // Re-export for convenience
+pub use error::FlagsmithError;
 pub use error::FlagsmithError as Error;
 
 /// Trait for Flagsmith client operations, enabling mockability in tests.
@@ -517,7 +517,7 @@ impl FeatureProvider for FlagsmithProvider {
 }
 
 /// Convert serde_json::Value to open_feature::Value.
-fn json_to_open_feature_value(json_val: JsonValue) -> Value {
+pub fn json_to_open_feature_value(json_val: JsonValue) -> Value {
     match json_val {
         JsonValue::Null => Value::String(String::new()),
         JsonValue::Bool(b) => Value::Bool(b),
@@ -546,7 +546,7 @@ fn json_to_open_feature_value(json_val: JsonValue) -> Value {
 }
 
 /// Validate that a flag key is not empty.
-fn validate_flag_key(flag_key: &str) -> Result<(), EvaluationError> {
+pub fn validate_flag_key(flag_key: &str) -> Result<(), EvaluationError> {
     if flag_key.is_empty() {
         return Err(EvaluationError {
             code: open_feature::EvaluationErrorCode::General("Invalid flag key".to_string()),
@@ -563,7 +563,7 @@ fn validate_flag_key(flag_key: &str) -> Result<(), EvaluationError> {
 ///
 /// Note: Struct fields are not supported by Flagsmith traits and will be
 /// filtered out with a warning logged.
-fn context_to_traits(context: &EvaluationContext) -> Vec<flagsmith::flagsmith::models::SDKTrait> {
+pub fn context_to_traits(context: &EvaluationContext) -> Vec<flagsmith::flagsmith::models::SDKTrait> {
     context
         .custom_fields
         .iter()
@@ -609,238 +609,12 @@ fn context_to_traits(context: &EvaluationContext) -> Vec<flagsmith::flagsmith::m
 /// - Identity evaluation (has targeting_key) � TargetingMatch
 /// - Environment evaluation (no targeting_key) � Static
 /// - Flag disabled � Disabled
-fn determine_reason(context: &EvaluationContext, enabled: bool) -> Reason {
+pub fn determine_reason(context: &EvaluationContext, enabled: bool) -> Reason {
     if !enabled {
         Reason::Disabled
     } else if context.targeting_key.is_some() {
         Reason::TargetingMatch
     } else {
         Reason::Static
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use test_log::test;
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_empty_environment_key_fails() {
-        let result = FlagsmithProvider::new("".to_string(), FlagsmithOptions::default()).await;
-
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            FlagsmithError::Config("Environment key cannot be empty".to_string())
-        );
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_local_evaluation_without_server_key_fails() {
-        let result = FlagsmithProvider::new(
-            "regular-key".to_string(),
-            FlagsmithOptions::default().with_local_evaluation(true),
-        )
-        .await;
-
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            FlagsmithError::Config(msg) => {
-                assert!(msg.contains("server-side environment key"));
-            }
-            _ => panic!("Expected Config error"),
-        }
-    }
-
-    #[test]
-    fn test_context_to_traits() {
-        let context = EvaluationContext::default()
-            .with_custom_field("email", "user@example.com")
-            .with_custom_field("age", 25)
-            .with_custom_field("premium", true)
-            .with_custom_field("score", 98.5);
-
-        let traits = context_to_traits(&context);
-
-        assert_eq!(traits.len(), 4);
-
-        // Check that all traits were created
-        let trait_keys: Vec<String> = traits.iter().map(|t| t.trait_key.clone()).collect();
-        assert!(trait_keys.contains(&"email".to_string()));
-        assert!(trait_keys.contains(&"age".to_string()));
-        assert!(trait_keys.contains(&"premium".to_string()));
-        assert!(trait_keys.contains(&"score".to_string()));
-    }
-
-    #[test]
-    fn test_context_to_traits_filters_struct_fields() {
-        use std::collections::HashMap;
-        use std::sync::Arc;
-
-        let mut struct_fields = HashMap::new();
-        struct_fields.insert("nested_field".to_string(), Value::String("value".to_string()));
-        let struct_value = StructValue { fields: struct_fields };
-
-        let mut context = EvaluationContext::default()
-            .with_custom_field("email", "user@example.com")
-            .with_custom_field("age", 25);
-
-        context.custom_fields.insert(
-            "metadata".to_string(),
-            EvaluationContextFieldValue::Struct(Arc::new(struct_value)),
-        );
-
-        let traits = context_to_traits(&context);
-
-        assert_eq!(traits.len(), 2);
-
-        let trait_keys: Vec<String> = traits.iter().map(|t| t.trait_key.clone()).collect();
-        assert!(trait_keys.contains(&"email".to_string()));
-        assert!(trait_keys.contains(&"age".to_string()));
-        assert!(!trait_keys.contains(&"metadata".to_string()));
-    }
-
-    #[test]
-    fn test_determine_reason_disabled() {
-        let context = EvaluationContext::default();
-        let reason = determine_reason(&context, false);
-        assert_eq!(reason, Reason::Disabled);
-    }
-
-    #[test]
-    fn test_determine_reason_targeting_match() {
-        let context = EvaluationContext::default().with_targeting_key("user-123");
-        let reason = determine_reason(&context, true);
-        assert_eq!(reason, Reason::TargetingMatch);
-    }
-
-    #[test]
-    fn test_determine_reason_static() {
-        let context = EvaluationContext::default();
-        let reason = determine_reason(&context, true);
-        assert_eq!(reason, Reason::Static);
-    }
-
-    #[test]
-    fn test_metadata() {
-        let provider = FlagsmithProvider {
-            metadata: ProviderMetadata::new("flagsmith"),
-            client: Arc::new(Flagsmith::new(
-                "test-key".to_string(),
-                FlagsmithSDKOptions::default(),
-            )),
-        };
-
-        assert_eq!(provider.metadata().name, "flagsmith");
-    }
-
-    #[test]
-    fn test_validate_flag_key_empty() {
-        let result = validate_flag_key("");
-        assert!(result.is_err());
-        if let Err(err) = result {
-            assert!(err.message.unwrap().contains("empty"));
-        }
-    }
-
-    #[test]
-    fn test_validate_flag_key_valid() {
-        let result = validate_flag_key("my-flag");
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_json_to_open_feature_value_primitives() {
-        let json_null = serde_json::json!(null);
-        let json_bool = serde_json::json!(true);
-        let json_int = serde_json::json!(42);
-        let json_float = serde_json::json!(3.14);
-        let json_string = serde_json::json!("hello");
-
-        assert!(matches!(
-            json_to_open_feature_value(json_null),
-            Value::String(_)
-        ));
-        assert!(matches!(
-            json_to_open_feature_value(json_bool),
-            Value::Bool(true)
-        ));
-        assert!(matches!(
-            json_to_open_feature_value(json_int),
-            Value::Int(42)
-        ));
-
-        if let Value::Float(f) = json_to_open_feature_value(json_float) {
-            assert!((f - 3.14).abs() < 0.001);
-        } else {
-            panic!("Expected Float value");
-        }
-
-        if let Value::String(s) = json_to_open_feature_value(json_string) {
-            assert_eq!(s, "hello");
-        } else {
-            panic!("Expected String value");
-        }
-    }
-
-    #[test]
-    fn test_json_to_open_feature_value_array() {
-        let json_array = serde_json::json!([1, 2, 3]);
-
-        if let Value::Array(arr) = json_to_open_feature_value(json_array) {
-            assert_eq!(arr.len(), 3);
-            assert!(matches!(arr[0], Value::Int(1)));
-            assert!(matches!(arr[1], Value::Int(2)));
-            assert!(matches!(arr[2], Value::Int(3)));
-        } else {
-            panic!("Expected Array value");
-        }
-    }
-
-    #[test]
-    fn test_json_to_open_feature_value_object() {
-        let json_object = serde_json::json!({
-            "name": "test",
-            "count": 10,
-            "active": true
-        });
-
-        if let Value::Struct(s) = json_to_open_feature_value(json_object) {
-            assert_eq!(s.fields.len(), 3);
-            assert!(s.fields.contains_key("name"));
-            assert!(s.fields.contains_key("count"));
-            assert!(s.fields.contains_key("active"));
-        } else {
-            panic!("Expected Struct value");
-        }
-    }
-
-    #[test]
-    fn test_json_to_open_feature_value_nested() {
-        let json_nested = serde_json::json!({
-            "user": {
-                "name": "Alice",
-                "age": 30
-            },
-            "tags": ["admin", "user"]
-        });
-
-        if let Value::Struct(s) = json_to_open_feature_value(json_nested) {
-            assert_eq!(s.fields.len(), 2);
-
-            if let Some(Value::Struct(user)) = s.fields.get("user") {
-                assert_eq!(user.fields.len(), 2);
-            } else {
-                panic!("Expected nested struct for user");
-            }
-
-            if let Some(Value::Array(tags)) = s.fields.get("tags") {
-                assert_eq!(tags.len(), 2);
-            } else {
-                panic!("Expected array for tags");
-            }
-        } else {
-            panic!("Expected Struct value");
-        }
     }
 }
