@@ -349,9 +349,7 @@ impl FeatureProvider for FlagsmithProvider {
 
         let flags = self.get_flags(context).await?;
 
-        let flag = flags
-            .get_flag(flag_key)
-            .map_err(FlagsmithError::from)?;
+        let flag = flags.get_flag(flag_key).map_err(FlagsmithError::from)?;
 
         if !matches!(flag.value.value_type, FlagsmithValueType::String) {
             return Err(EvaluationError {
@@ -385,9 +383,7 @@ impl FeatureProvider for FlagsmithProvider {
 
         let flags = self.get_flags(context).await?;
 
-        let flag = flags
-            .get_flag(flag_key)
-            .map_err(FlagsmithError::from)?;
+        let flag = flags.get_flag(flag_key).map_err(FlagsmithError::from)?;
 
         let value = match flag.value.value_type {
             FlagsmithValueType::Integer => {
@@ -434,9 +430,7 @@ impl FeatureProvider for FlagsmithProvider {
 
         let flags = self.get_flags(context).await?;
 
-        let flag = flags
-            .get_flag(flag_key)
-            .map_err(FlagsmithError::from)?;
+        let flag = flags.get_flag(flag_key).map_err(FlagsmithError::from)?;
 
         let value = match flag.value.value_type {
             FlagsmithValueType::Float => {
@@ -483,9 +477,7 @@ impl FeatureProvider for FlagsmithProvider {
 
         let flags = self.get_flags(context).await?;
 
-        let flag = flags
-            .get_flag(flag_key)
-            .map_err(FlagsmithError::from)?;
+        let flag = flags.get_flag(flag_key).map_err(FlagsmithError::from)?;
 
         let json_value: JsonValue =
             serde_json::from_str(&flag.value.value).map_err(|e| EvaluationError {
