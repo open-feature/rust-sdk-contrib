@@ -310,14 +310,13 @@ async fn test_resolve_struct_value_type_mismatch() {
 
     assert!(result.is_err());
     let error = result.unwrap_err();
-    assert_eq!(
-        error.code,
-        open_feature::EvaluationErrorCode::TypeMismatch
+    assert_eq!(error.code, open_feature::EvaluationErrorCode::TypeMismatch);
+    assert!(
+        error
+            .message
+            .unwrap()
+            .contains("Expected string type for JSON")
     );
-    assert!(error
-        .message
-        .unwrap()
-        .contains("Expected string type for JSON"));
 }
 
 #[tokio::test]
