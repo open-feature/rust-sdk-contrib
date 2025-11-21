@@ -55,7 +55,10 @@ use error::FlagsmithError;
 use flagsmith::{Flagsmith, FlagsmithOptions as FlagsmithSDKOptions};
 use flagsmith_flag_engine::types::{FlagsmithValue, FlagsmithValueType};
 use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
-use open_feature::{EvaluationContext, EvaluationContextFieldValue, EvaluationError, EvaluationReason as Reason, StructValue, Value};
+use open_feature::{
+    EvaluationContext, EvaluationContextFieldValue, EvaluationError, EvaluationReason as Reason,
+    StructValue, Value,
+};
 use serde_json::Value as JsonValue;
 use std::fmt;
 use std::sync::Arc;
@@ -66,7 +69,9 @@ pub use error::FlagsmithError as Error;
 
 /// Trait for Flagsmith client operations, enabling mockability in tests.
 pub trait FlagsmithClient: Send + Sync {
-    fn get_environment_flags(&self) -> Result<flagsmith::flagsmith::models::Flags, flagsmith::error::Error>;
+    fn get_environment_flags(
+        &self,
+    ) -> Result<flagsmith::flagsmith::models::Flags, flagsmith::error::Error>;
     fn get_identity_flags(
         &self,
         identifier: &str,
@@ -76,7 +81,9 @@ pub trait FlagsmithClient: Send + Sync {
 }
 
 impl FlagsmithClient for Flagsmith {
-    fn get_environment_flags(&self) -> Result<flagsmith::flagsmith::models::Flags, flagsmith::error::Error> {
+    fn get_environment_flags(
+        &self,
+    ) -> Result<flagsmith::flagsmith::models::Flags, flagsmith::error::Error> {
         self.get_environment_flags()
     }
 
@@ -206,7 +213,8 @@ impl FlagsmithProvider {
         // Validate local evaluation requirements
         if options.enable_local_evaluation && !environment_key.starts_with("ser.") {
             return Err(FlagsmithError::Config(
-                "Local evaluation requires a server-side environment key (starts with 'ser.')".to_string(),
+                "Local evaluation requires a server-side environment key (starts with 'ser.')"
+                    .to_string(),
             ));
         }
 
@@ -214,12 +222,10 @@ impl FlagsmithProvider {
         if let Some(ref url_str) = options.api_url {
             let parsed_url = url::Url::parse(url_str)?;
             if !matches!(parsed_url.scheme(), "http" | "https") {
-                return Err(FlagsmithError::Config(
-                    format!(
-                        "Invalid API URL scheme '{}'. Only http and https are supported",
-                        parsed_url.scheme()
-                    )
-                ));
+                return Err(FlagsmithError::Config(format!(
+                    "Invalid API URL scheme '{}'. Only http and https are supported",
+                    parsed_url.scheme()
+                )));
             }
         }
 
@@ -346,7 +352,9 @@ impl FeatureProvider for FlagsmithProvider {
         })?
         .map_err(FlagsmithError::from)?;
 
-        let flag = flags.get_flag(&flag_key_owned).map_err(FlagsmithError::from)?;
+        let flag = flags
+            .get_flag(&flag_key_owned)
+            .map_err(FlagsmithError::from)?;
 
         if !matches!(flag.value.value_type, FlagsmithValueType::String) {
             return Err(EvaluationError {
@@ -401,22 +409,23 @@ impl FeatureProvider for FlagsmithProvider {
         })?
         .map_err(FlagsmithError::from)?;
 
-        let flag = flags.get_flag(&flag_key_owned).map_err(FlagsmithError::from)?;
+        let flag = flags
+            .get_flag(&flag_key_owned)
+            .map_err(FlagsmithError::from)?;
 
         let value = match flag.value.value_type {
-            FlagsmithValueType::Integer => flag
-                .value
-                .value
-                .parse::<i64>()
-                .map_err(|e| {
-                    EvaluationError {
+            FlagsmithValueType::Integer => {
+                flag.value
+                    .value
+                    .parse::<i64>()
+                    .map_err(|e| EvaluationError {
                         code: open_feature::EvaluationErrorCode::TypeMismatch,
                         message: Some(format!(
                             "Failed to parse integer value '{}': {}",
                             flag.value.value, e
                         )),
-                    }
-                })?,
+                    })?
+            }
             _ => {
                 return Err(EvaluationError {
                     code: open_feature::EvaluationErrorCode::TypeMismatch,
@@ -470,22 +479,23 @@ impl FeatureProvider for FlagsmithProvider {
         })?
         .map_err(FlagsmithError::from)?;
 
-        let flag = flags.get_flag(&flag_key_owned).map_err(FlagsmithError::from)?;
+        let flag = flags
+            .get_flag(&flag_key_owned)
+            .map_err(FlagsmithError::from)?;
 
         let value = match flag.value.value_type {
-            FlagsmithValueType::Float => flag
-                .value
-                .value
-                .parse::<f64>()
-                .map_err(|e| {
-                    EvaluationError {
+            FlagsmithValueType::Float => {
+                flag.value
+                    .value
+                    .parse::<f64>()
+                    .map_err(|e| EvaluationError {
                         code: open_feature::EvaluationErrorCode::TypeMismatch,
                         message: Some(format!(
                             "Failed to parse float value '{}': {}",
                             flag.value.value, e
                         )),
-                    }
-                })?,
+                    })?
+            }
             _ => {
                 return Err(EvaluationError {
                     code: open_feature::EvaluationErrorCode::TypeMismatch,
@@ -539,10 +549,12 @@ impl FeatureProvider for FlagsmithProvider {
         })?
         .map_err(FlagsmithError::from)?;
 
-        let flag = flags.get_flag(&flag_key_owned).map_err(FlagsmithError::from)?;
+        let flag = flags
+            .get_flag(&flag_key_owned)
+            .map_err(FlagsmithError::from)?;
 
-        let json_value: JsonValue = serde_json::from_str(&flag.value.value)
-            .map_err(|e| EvaluationError {
+        let json_value: JsonValue =
+            serde_json::from_str(&flag.value.value).map_err(|e| EvaluationError {
                 code: open_feature::EvaluationErrorCode::ParseError,
                 message: Some(format!("Failed to parse JSON: {}", e)),
             })?;
@@ -682,11 +694,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_empty_environment_key_fails() {
-        let result = FlagsmithProvider::new(
-            "".to_string(),
-            FlagsmithOptions::default(),
-        )
-        .await;
+        let result = FlagsmithProvider::new("".to_string(), FlagsmithOptions::default()).await;
 
         assert!(result.is_err());
         assert_eq!(
@@ -741,8 +749,7 @@ mod tests {
 
     #[test]
     fn test_determine_reason_targeting_match() {
-        let context = EvaluationContext::default()
-            .with_targeting_key("user-123");
+        let context = EvaluationContext::default().with_targeting_key("user-123");
         let reason = determine_reason(&context, true);
         assert_eq!(reason, Reason::TargetingMatch);
     }
@@ -790,9 +797,18 @@ mod tests {
         let json_float = serde_json::json!(3.14);
         let json_string = serde_json::json!("hello");
 
-        assert!(matches!(json_to_open_feature_value(json_null), Value::String(_)));
-        assert!(matches!(json_to_open_feature_value(json_bool), Value::Bool(true)));
-        assert!(matches!(json_to_open_feature_value(json_int), Value::Int(42)));
+        assert!(matches!(
+            json_to_open_feature_value(json_null),
+            Value::String(_)
+        ));
+        assert!(matches!(
+            json_to_open_feature_value(json_bool),
+            Value::Bool(true)
+        ));
+        assert!(matches!(
+            json_to_open_feature_value(json_int),
+            Value::Int(42)
+        ));
 
         if let Value::Float(f) = json_to_open_feature_value(json_float) {
             assert!((f - 3.14).abs() < 0.001);
@@ -868,4 +884,3 @@ mod tests {
         }
     }
 }
-

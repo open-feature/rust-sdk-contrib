@@ -23,9 +23,7 @@ pub enum FlagsmithError {
 impl From<flagsmith::error::Error> for FlagsmithError {
     fn from(error: flagsmith::error::Error) -> Self {
         match error.kind {
-            flagsmith::error::ErrorKind::FlagsmithAPIError => {
-                FlagsmithError::Api(error.msg)
-            }
+            flagsmith::error::ErrorKind::FlagsmithAPIError => FlagsmithError::Api(error.msg),
             flagsmith::error::ErrorKind::FlagsmithClientError => {
                 FlagsmithError::Evaluation(error.msg)
             }
@@ -54,9 +52,7 @@ impl From<FlagsmithError> for open_feature::EvaluationError {
 
         match error {
             FlagsmithError::Config(msg) => open_feature::EvaluationError {
-                code: EvaluationErrorCode::General(
-                    "Configuration error".to_string()
-                ),
+                code: EvaluationErrorCode::General("Configuration error".to_string()),
                 message: Some(msg),
             },
             FlagsmithError::Api(msg) => open_feature::EvaluationError {
@@ -71,9 +67,7 @@ impl From<FlagsmithError> for open_feature::EvaluationError {
                     }
                 } else {
                     open_feature::EvaluationError {
-                        code: EvaluationErrorCode::General(
-                            "Evaluation error".to_string()
-                        ),
+                        code: EvaluationErrorCode::General("Evaluation error".to_string()),
                         message: Some(msg),
                     }
                 }

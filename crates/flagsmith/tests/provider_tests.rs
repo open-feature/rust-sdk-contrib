@@ -1,11 +1,11 @@
+use flagsmith::flagsmith::models::Flags;
+use flagsmith_flag_engine::types::{FlagsmithValue, FlagsmithValueType};
 use open_feature::provider::FeatureProvider;
 use open_feature::{EvaluationContext, EvaluationReason as Reason};
 use open_feature_flagsmith::{FlagsmithClient, FlagsmithProvider};
-use flagsmith::flagsmith::models::Flags;
-use flagsmith_flag_engine::types::{FlagsmithValue, FlagsmithValueType};
+use serde_json;
 use std::collections::HashMap;
 use std::sync::Arc;
-use serde_json;
 
 struct MockFlagsmithClient {
     environment_flags: Option<HashMap<String, (FlagsmithValue, bool)>>,
@@ -45,11 +45,9 @@ impl MockFlagsmithClient {
                     FlagsmithValueType::Integer => {
                         serde_json::Value::Number(value.value.parse::<i64>().unwrap().into())
                     }
-                    FlagsmithValueType::Float => {
-                        serde_json::Value::Number(
-                            serde_json::Number::from_f64(value.value.parse::<f64>().unwrap()).unwrap()
-                        )
-                    }
+                    FlagsmithValueType::Float => serde_json::Value::Number(
+                        serde_json::Number::from_f64(value.value.parse::<f64>().unwrap()).unwrap(),
+                    ),
                     FlagsmithValueType::Bool => {
                         serde_json::Value::Bool(value.value.parse::<bool>().unwrap())
                     }
@@ -119,7 +117,9 @@ impl FlagsmithClient for MockFlagsmithClient {
     }
 }
 
-fn create_mock_flags(configs: Vec<(&str, FlagsmithValue, bool)>) -> HashMap<String, (FlagsmithValue, bool)> {
+fn create_mock_flags(
+    configs: Vec<(&str, FlagsmithValue, bool)>,
+) -> HashMap<String, (FlagsmithValue, bool)> {
     configs
         .into_iter()
         .map(|(name, value, enabled)| (name.to_string(), (value, enabled)))
@@ -298,7 +298,9 @@ async fn test_resolve_flag_not_found() {
     let provider = FlagsmithProvider::from_client(Arc::new(mock_client));
 
     let context = EvaluationContext::default();
-    let result = provider.resolve_bool_value("non-existent-flag", &context).await;
+    let result = provider
+        .resolve_bool_value("non-existent-flag", &context)
+        .await;
 
     assert!(result.is_err());
 }
