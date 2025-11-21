@@ -86,7 +86,6 @@ let multiplier = client.get_float_value("price-multiplier", &context, None).awai
 
 // Structured flags (JSON objects)
 let config = client.get_object_value("config", &context, None).await.unwrap();
-
 ## Local Evaluation
 
 Local evaluation mode downloads the environment configuration and evaluates flags locally for better performance:
