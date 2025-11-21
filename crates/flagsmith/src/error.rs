@@ -59,13 +59,6 @@ impl From<url::ParseError> for FlagsmithError {
     }
 }
 
-/// Convert serde_json errors to FlagsmithError
-impl From<serde_json::Error> for FlagsmithError {
-    fn from(error: serde_json::Error) -> Self {
-        FlagsmithError::Evaluation(format!("JSON parse error: {}", error))
-    }
-}
-
 /// Map FlagsmithError to OpenFeature EvaluationError
 impl From<FlagsmithError> for open_feature::EvaluationError {
     fn from(error: FlagsmithError) -> Self {

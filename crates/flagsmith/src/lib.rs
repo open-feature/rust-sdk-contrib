@@ -360,16 +360,8 @@ impl FeatureProvider for FlagsmithProvider {
 
         let flag = flags.get_flag(flag_key).map_err(FlagsmithError::from)?;
 
-        if !matches!(flag.value.value_type, FlagsmithValueType::String) {
-            return Err(EvaluationError {
-                code: open_feature::EvaluationErrorCode::TypeMismatch,
-                message: Some(format!(
-                    "Expected string type, but flag '{}' has type {:?}",
-                    flag_key, flag.value.value_type
-                )),
-            });
-        }
-
+        // Since all Flagsmith values are stored as strings internally, we can always
+        // return the value as a string regardless of the declared type
         let value = flag.value.value.clone();
         let reason = determine_reason(context, flag.enabled);
 
@@ -510,8 +502,11 @@ impl FeatureProvider for FlagsmithProvider {
             JsonValue::Object(map) => {
                 let mut struct_map = std::collections::HashMap::new();
                 for (key, json_val) in map {
-                    let of_value = json_to_open_feature_value(json_val);
-                    struct_map.insert(key, of_value);
+                    // Filter out null values - absent fields are more semantically correct than empty strings
+                    if !json_val.is_null() {
+                        let of_value = json_to_open_feature_value(json_val);
+                        struct_map.insert(key, of_value);
+                    }
                 }
                 StructValue { fields: struct_map }
             }
@@ -559,7 +554,10 @@ pub fn json_to_open_feature_value(json_val: JsonValue) -> Value {
         JsonValue::Object(map) => {
             let mut fields = std::collections::HashMap::new();
             for (k, v) in map {
-                fields.insert(k, json_to_open_feature_value(v));
+                // Filter out null values - absent fields are more semantically correct than empty strings
+                if !v.is_null() {
+                    fields.insert(k, json_to_open_feature_value(v));
+                }
             }
             Value::Struct(StructValue { fields })
         }

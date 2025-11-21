@@ -202,6 +202,31 @@ fn test_json_to_open_feature_value_object() {
 }
 
 #[test]
+fn test_json_to_open_feature_value_object_filters_nulls() {
+    // Test that null values in objects are filtered out
+    let json_object = serde_json::json!({
+        "name": "test",
+        "email": null,
+        "count": 10,
+        "phone": null,
+        "active": true
+    });
+
+    if let Value::Struct(s) = open_feature_flagsmith::json_to_open_feature_value(json_object) {
+        // Should only have 3 fields (email and phone filtered out)
+        assert_eq!(s.fields.len(), 3);
+        assert!(s.fields.contains_key("name"));
+        assert!(s.fields.contains_key("count"));
+        assert!(s.fields.contains_key("active"));
+        // Null fields should not be present
+        assert!(!s.fields.contains_key("email"));
+        assert!(!s.fields.contains_key("phone"));
+    } else {
+        panic!("Expected Struct value");
+    }
+}
+
+#[test]
 fn test_json_to_open_feature_value_nested() {
     let json_nested = serde_json::json!({
         "user": {
