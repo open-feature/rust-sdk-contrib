@@ -1,0 +1,16 @@
+# Keep all in alphabetical order
+components:
+  crates/env-var:
+    - jbovet
+    - MatteoJoliveau
+  crates/flagd:
+    - erenatas
+    - sheepduke
+  crates/flipt:
+    - tamaroning
+  crates/ofrep:
+    - erenatas
+    - Rahul-Baradol
+
+ignored-authors:
+  - renovate-bot
