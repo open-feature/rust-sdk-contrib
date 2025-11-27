@@ -11,6 +11,8 @@ components:
   crates/ofrep:
     - erenatas
     - Rahul-Baradol
+  crates/flagsmith:
+    - zaimwa9
 
 ignored-authors:
   - renovate-bot
