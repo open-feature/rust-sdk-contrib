@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.1.0](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagd-v0.0.8...open-feature-flagd-v0.1.0) (2025-12-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* flagd, behavioral tests conformance (evaluation and config) ([#76](https://github.com/open-feature/rust-sdk-contrib/issues/76))
+* Update dependencies and fix flaky retry mechanism tests ([#74](https://github.com/open-feature/rust-sdk-contrib/issues/74))
+
+### 🐛 Bug Fixes
+
+* extend flagd ci to ofrep, add msrv ([#65](https://github.com/open-feature/rust-sdk-contrib/issues/65)) ([692c588](https://github.com/open-feature/rust-sdk-contrib/commit/692c588bc411ef4f1b8ef1baaca89db9b9df02eb))
+* flagd, behavioral tests conformance (evaluation and config) ([#76](https://github.com/open-feature/rust-sdk-contrib/issues/76)) ([d3c4ec4](https://github.com/open-feature/rust-sdk-contrib/commit/d3c4ec4aacfc375c96ca71eec34346d1a7e10eb9))
+
+
+### 🧹 Chore
+
+* **deps:** update rust crate testcontainers to 0.26.0 ([#83](https://github.com/open-feature/rust-sdk-contrib/issues/83)) ([b6b60f2](https://github.com/open-feature/rust-sdk-contrib/commit/b6b60f2eb65b2c0889ee8a16b8fbffecc17a056d))
+* Update dependencies and fix flaky retry mechanism tests ([#74](https://github.com/open-feature/rust-sdk-contrib/issues/74)) ([9b78024](https://github.com/open-feature/rust-sdk-contrib/commit/9b780249584eb1ddfe7ad7f1049c415ff8658234))
+
 ## [0.0.8](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagd-v0.0.7...open-feature-flagd-v0.0.8) (2025-07-11)
 
 
