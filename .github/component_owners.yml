@@ -12,6 +12,7 @@ components:
     - erenatas
     - Rahul-Baradol
   crates/flagsmith:
+    - matthewelwell
     - zaimwa9
 
 ignored-authors:
