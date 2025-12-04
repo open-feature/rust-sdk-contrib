@@ -1,0 +1,47 @@
+[package]
+name = "open-feature-flagsmith"
+version = "0.1.0"
+authors = ["OpenFeature Maintainers"]
+edition = "2024"
+license = "Apache-2.0"
+description = "Flagsmith provider for OpenFeature"
+homepage = "https://openfeature.dev"
+repository = "https://github.com/open-feature/rust-sdk-contrib"
+readme = "README.md"
+categories = ["config", "api-bindings"]
+keywords = ["openfeature", "feature-flags", "flagsmith"]
+
+[dependencies]
+# OpenFeature SDK
+open-feature = "0.2"
+
+# Flagsmith SDK
+flagsmith = "2.1"
+
+# Async runtime
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
+async-trait = "0.1"
+
+# Error handling
+thiserror = "1.0"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Logging
+tracing = "0.1"
+
+# URL validation
+url = "2.0"
+
+# HTTP client (for HeaderMap type)
+reqwest = { version = "0.11", default-features = false }
+
+# Flagsmith flag engine types (must match flagsmith version)
+flagsmith-flag-engine = "0.5"
+
+[dev-dependencies]
+# Testing
+test-log = "0.2"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
