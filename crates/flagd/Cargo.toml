@@ -29,7 +29,7 @@ rpc = ["dep:tonic", "dep:tonic-prost", "dep:prost", "dep:prost-types", "dep:hype
 # REST evaluation mode - uses HTTP/OFREP to connect to flagd service
 rest = ["dep:reqwest"]
 # In-process evaluation mode - local evaluation with gRPC sync or file-based configuration
-in-process = ["dep:tonic", "dep:tonic-prost", "dep:prost", "dep:prost-types", "dep:datalogic-rs", "dep:murmurhash3", "dep:semver"]
+in-process = ["dep:tonic", "dep:tonic-prost", "dep:prost", "dep:prost-types", "dep:datalogic-rs", "dep:murmurhash3", "dep:semver", "dep:notify"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -38,7 +38,6 @@ tonic-prost-build = "0.14"
 
 [dev-dependencies]
 cucumber = "0.22"
-tokio-stream = "0.1"
 futures-core = "0.3"
 testcontainers = { version = "0.26.0", features = ["http_wait", "blocking"] }
 wiremock = "0.6.5"
@@ -50,24 +49,23 @@ test-log = { version = "0.2", features = ["trace"] }
 [dependencies]
 open-feature = "0.2"
 async-trait = "0.1"
-tokio = { version = "1.48", features = ["full"] }
+tokio = { version = "1.48", features = ["sync", "time", "fs", "rt", "rt-multi-thread", "macros", "net"] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 lru = "0.16"
-futures = "0.3"
+tokio-stream = "0.1"
 tracing = "0.1"
-anyhow = "1.0.100"
 thiserror = "2.0"
 
 # RPC and In-Process shared dependencies (gRPC)
-tonic = { version = "0.14", optional = true }
+tonic = { version = "0.14", default-features = false, features = ["transport", "codegen"], optional = true }
 tonic-prost = { version = "0.14", optional = true }
 prost = { version = "0.14", optional = true }
 prost-types = { version = "0.14", optional = true }
 
 # RPC-specific dependencies
 hyper-util = { version = "0.1", features = ["tokio"], optional = true }
-tower = { version = "0.5", optional = true }
+tower = { version = "0.5", default-features = false, features = ["util"], optional = true }
 
 # REST-specific dependencies
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"], optional = true }
@@ -76,3 +74,4 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "str
 datalogic-rs = { version = "4.0.4", optional = true }
 murmurhash3 = { version = "0.0.5", optional = true }
 semver = { version = "1.0.27", optional = true }
+notify = { version = "8.0", optional = true }

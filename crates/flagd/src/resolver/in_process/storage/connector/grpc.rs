@@ -1,8 +1,8 @@
 use super::{Connector, QueuePayload, QueuePayloadType};
 use crate::FlagdOptions;
+use crate::error::FlagdError;
 use crate::flagd::sync::v1::{SyncFlagsRequest, flag_sync_service_client::FlagSyncServiceClient};
 use crate::resolver::common::upstream::UpstreamConfig;
-use anyhow::{Context, Result};
 use std::str::FromStr;
 use std::sync::{
     Arc,
@@ -33,7 +33,7 @@ pub struct GrpcStreamConnector {
 }
 
 impl GrpcStreamConnector {
-    // Updated new() accepts the extra authority parameter.
+    /// Create a new GrpcStreamConnector for TCP connections
     pub fn new(
         target: String,
         selector: Option<String>,
@@ -60,7 +60,40 @@ impl GrpcStreamConnector {
         }
     }
 
-    async fn establish_connection_using(&self, config: &UpstreamConfig) -> Result<Channel> {
+    /// Create a new GrpcStreamConnector for Unix socket connections
+    pub fn new_unix(
+        target: String,
+        socket_path: String,
+        selector: Option<String>,
+        options: &FlagdOptions,
+    ) -> Self {
+        debug!(
+            "Creating new GrpcStreamConnector for Unix socket: {}",
+            socket_path
+        );
+        let (sender, receiver) = channel(1000);
+        Self {
+            target,
+            selector,
+            sender,
+            stream: Arc::new(Mutex::new(Some(receiver))),
+            shutdown: Arc::new(AtomicBool::new(false)),
+            retry_backoff_ms: options.retry_backoff_ms,
+            retry_backoff_max_ms: options.retry_backoff_max_ms,
+            retry_grace_period: options.retry_grace_period,
+            stream_deadline_ms: options.stream_deadline_ms,
+            authority: "localhost".to_string(), // Unix sockets use localhost as authority
+            provider_id: options
+                .provider_id
+                .clone()
+                .unwrap_or_else(|| "rust-flagd-provider".to_string()),
+        }
+    }
+
+    async fn establish_connection_using(
+        &self,
+        config: &UpstreamConfig,
+    ) -> Result<Channel, FlagdError> {
         debug!("Created endpoint: {:?}", config.endpoint().uri());
         let mut endpoint = config.endpoint().clone();
         if self.stream_deadline_ms > 0 {
@@ -70,17 +103,25 @@ impl GrpcStreamConnector {
         // Use 'origin' to inject the desired authority. Since origin() expects a full URI,
         // we prepend "http://" to the authority string.
         let authority_uri = Uri::from_str(&format!("http://{}", self.authority))
-            .context("Invalid authority URI")?;
+            .map_err(|e| FlagdError::Config(format!("Invalid authority URI: {}", e)))?;
         endpoint = endpoint.origin(authority_uri);
 
         endpoint
             .timeout(Duration::from_secs(CONNECTION_TIMEOUT_SECS))
             .connect()
             .await
-            .context(format!("Failed to connect to gRPC server: {}", self.target))
+            .map_err(|e| {
+                FlagdError::Connection(format!(
+                    "Failed to connect to gRPC server {}: {}",
+                    self.target, e
+                ))
+            })
     }
 
-    async fn connect_with_timeout_using(&self, config: &UpstreamConfig) -> Result<Channel> {
+    async fn connect_with_timeout_using(
+        &self,
+        config: &UpstreamConfig,
+    ) -> Result<Channel, FlagdError> {
         debug!(
             "Attempting connection with timeout to target: {}",
             self.target
@@ -97,7 +138,10 @@ impl GrpcStreamConnector {
                     attempts += 1;
                     if attempts >= self.retry_grace_period {
                         error!("Connection attempts exhausted: {}", e);
-                        return Err(e.context("Max retries exceeded"));
+                        return Err(FlagdError::Connection(format!(
+                            "Max retries exceeded: {}",
+                            e
+                        )));
                     }
                     let delay = Duration::from_millis(current_delay as u64);
                     warn!(
@@ -111,12 +155,12 @@ impl GrpcStreamConnector {
                 }
             }
         }
-        Err(anyhow::anyhow!(
-            "Shutdown requested during connection attempts"
+        Err(FlagdError::Connection(
+            "Shutdown requested during connection attempts".to_string(),
         ))
     }
 
-    async fn start_stream(&self) -> Result<()> {
+    async fn start_stream(&self) -> Result<(), FlagdError> {
         debug!("Starting sync stream connection to {}", self.target);
         let config = UpstreamConfig::new(self.target.clone(), true)?;
         let channel = self.connect_with_timeout_using(&config).await?;
@@ -187,7 +231,7 @@ impl GrpcStreamConnector {
 
 #[async_trait::async_trait]
 impl Connector for GrpcStreamConnector {
-    async fn init(&self) -> Result<()> {
+    async fn init(&self) -> Result<(), FlagdError> {
         debug!("Initializing GrpcStreamConnector");
         let connector = self.clone();
         // Instead of spawning start_stream directly, we spawn using our new run_sync_stream loop.
@@ -203,7 +247,7 @@ impl Connector for GrpcStreamConnector {
         self.stream.clone()
     }
 
-    async fn shutdown(&self) -> Result<()> {
+    async fn shutdown(&self) -> Result<(), FlagdError> {
         debug!("Shutting down GrpcStreamConnector");
         self.shutdown.store(true, Ordering::Relaxed);
         Ok(())

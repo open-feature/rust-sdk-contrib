@@ -1,7 +1,7 @@
+use crate::error::FlagdError;
 use crate::resolver::common::upstream::UpstreamConfig;
 use crate::resolver::in_process::targeting::Operator;
 use crate::{CacheService, FlagdOptions};
-use anyhow::Result;
 use async_trait::async_trait;
 use open_feature::Value as OpenFeatureValue;
 use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
@@ -23,7 +23,16 @@ pub struct InProcessResolver {
 }
 
 impl InProcessResolver {
-    pub async fn new(options: &FlagdOptions) -> Result<Self> {
+    /// Gracefully shutdown the resolver and release resources
+    pub async fn shutdown(&self) -> Result<(), FlagdError> {
+        debug!("Shutting down InProcessResolver");
+        self.store.shutdown().await?;
+        Ok(())
+    }
+}
+
+impl InProcessResolver {
+    pub async fn new(options: &FlagdOptions) -> Result<Self, FlagdError> {
         let (store, state_receiver) = match &options.socket_path {
             Some(_) => Self::create_unix_socket_store(options).await?,
             None => Self::create_tcp_store(options).await?,
@@ -68,23 +77,45 @@ impl InProcessResolver {
     }
 
     async fn create_unix_socket_store(
-        _options: &FlagdOptions,
-    ) -> Result<(
-        Arc<FlagStore>,
-        tokio::sync::mpsc::Receiver<crate::resolver::in_process::storage::StorageStateChange>,
-    )> {
-        // Unix socket store for in-process is not implemented
-        Err(anyhow::anyhow!(
-            "Unix socket store for in-process is not implemented"
-        ))
+        options: &FlagdOptions,
+    ) -> Result<
+        (
+            Arc<FlagStore>,
+            tokio::sync::mpsc::Receiver<crate::resolver::in_process::storage::StorageStateChange>,
+        ),
+        FlagdError,
+    > {
+        let socket_path = options
+            .socket_path
+            .as_ref()
+            .ok_or_else(|| FlagdError::Config("Unix socket path not provided".to_string()))?;
+
+        debug!("Creating Unix socket store with path: {}", socket_path);
+
+        // For Unix sockets, we use a special URI format
+        let target = format!("unix://{}", socket_path);
+        let connector = GrpcStreamConnector::new_unix(
+            target,
+            socket_path.clone(),
+            options.selector.clone(),
+            options,
+        );
+
+        let (store, state_receiver) = FlagStore::new(Arc::new(connector));
+        let store = Arc::new(store);
+        store.init().await?;
+        Ok((store, state_receiver))
     }
 
     async fn create_tcp_store(
         options: &FlagdOptions,
-    ) -> Result<(
-        Arc<FlagStore>,
-        tokio::sync::mpsc::Receiver<crate::resolver::in_process::storage::StorageStateChange>,
-    )> {
+    ) -> Result<
+        (
+            Arc<FlagStore>,
+            tokio::sync::mpsc::Receiver<crate::resolver::in_process::storage::StorageStateChange>,
+        ),
+        FlagdError,
+    > {
         let target = options
             .target_uri
             .clone()

@@ -482,7 +482,7 @@ mod tests {
             &self,
             _request: Request<EventStreamRequest>,
         ) -> Result<Response<Self::EventStreamStream>, Status> {
-            let output = futures::stream::empty();
+            let output = tokio_stream::empty();
             Ok(Response::new(Box::pin(output)))
         }
     }

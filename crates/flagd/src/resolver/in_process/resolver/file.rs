@@ -1,9 +1,9 @@
+use crate::error::FlagdError;
 use crate::resolver::in_process::model::value_converter::ValueConverter;
 use crate::resolver::in_process::storage::connector::file::FileConnector;
 use crate::resolver::in_process::storage::{FlagStore, StorageState, StorageStateChange};
 use crate::resolver::in_process::targeting::Operator;
 use crate::{CacheService, CacheSettings};
-use anyhow::Result;
 use async_trait::async_trait;
 use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
 use open_feature::{EvaluationContext, EvaluationError, EvaluationErrorCode, StructValue, Value};
@@ -19,7 +19,10 @@ pub struct FileResolver {
     state_receiver: Arc<Mutex<tokio::sync::mpsc::Receiver<StorageStateChange>>>,
 }
 impl FileResolver {
-    pub async fn new(source_path: String, cache_settings: Option<CacheSettings>) -> Result<Self> {
+    pub async fn new(
+        source_path: String,
+        cache_settings: Option<CacheSettings>,
+    ) -> Result<Self, FlagdError> {
         let connector = FileConnector::new(source_path);
         let (store, mut state_receiver) = FlagStore::new(Arc::new(connector));
         let store = Arc::new(store);
@@ -31,10 +34,14 @@ impl FileResolver {
             tokio::time::timeout(std::time::Duration::from_secs(5), state_receiver.recv()).await
         {
             if state_change.storage_state != StorageState::Ok {
-                return Err(anyhow::anyhow!("Failed to initialize flag store"));
+                return Err(FlagdError::Sync(
+                    "Failed to initialize flag store".to_string(),
+                ));
             }
         } else {
-            return Err(anyhow::anyhow!("Timeout waiting for initial flag state"));
+            return Err(FlagdError::Timeout(
+                "Timeout waiting for initial flag state".to_string(),
+            ));
         }
 
         let cache = cache_settings.map(|settings| Arc::new(CacheService::new(settings)));
