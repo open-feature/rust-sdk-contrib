@@ -222,12 +222,10 @@ use crate::error::FlagdError;
 #[cfg(feature = "in-process")]
 use crate::resolver::in_process::resolver::{FileResolver, InProcessResolver};
 use async_trait::async_trait;
-use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
-use open_feature::{
-    EvaluationContext, EvaluationError, StructValue, Value,
-};
 #[cfg(feature = "rpc")]
 use open_feature::EvaluationContextFieldValue;
+use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
+use open_feature::{EvaluationContext, EvaluationError, StructValue, Value};
 #[cfg(feature = "rest")]
 use resolver::rest::RestResolver;
 use tracing::debug;
@@ -535,7 +533,9 @@ pub(crate) fn convert_context(context: &EvaluationContext) -> Option<prost_types
 }
 
 #[cfg(feature = "rpc")]
-pub(crate) fn convert_proto_struct_to_struct_value(proto_struct: prost_types::Struct) -> StructValue {
+pub(crate) fn convert_proto_struct_to_struct_value(
+    proto_struct: prost_types::Struct,
+) -> StructValue {
     let fields = proto_struct
         .fields
         .into_iter()
