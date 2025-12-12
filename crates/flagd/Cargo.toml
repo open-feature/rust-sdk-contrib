@@ -24,7 +24,7 @@ include = [
 tonic-prost-build = "0.14"
 
 [dev-dependencies]
-cucumber = "0.21"
+cucumber = "0.22"
 tokio-stream = "0.1"
 futures-core = "0.3"
 testcontainers = { version = "0.26.0", features = ["http_wait", "blocking"] }
