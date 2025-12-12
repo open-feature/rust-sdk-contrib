@@ -12,6 +12,7 @@ edition = "2024"
 members = [
     "crates/env-var",
     "crates/flagd",
+    "crates/flagsmith",
     "crates/flipt",
     "crates/ofrep"
 ]
