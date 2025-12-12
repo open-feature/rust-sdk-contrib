@@ -22,7 +22,7 @@ tokio = { version = "1.48.0", features = ["full"] }
 cucumber = "0.22.0"
 futures = "0.3.31"
 test-with = { version = "0.15", features = ["runtime"] }
-libtest-with = { version = "0.8.1-10" }
+libtest-with = { version = "0.8.1-12" }
 temp-env = "0.3"
 
 [[test]]
