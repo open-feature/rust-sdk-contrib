@@ -416,6 +416,8 @@ impl FlagdOptions {
             ResolverType::Rpc => 8013,
             #[cfg(feature = "in-process")]
             ResolverType::InProcess => 8015,
+            #[cfg(feature = "rest")]
+            ResolverType::Rest => 8016,
             #[allow(unreachable_patterns)]
             _ => 8013,
         }
