@@ -34,6 +34,36 @@ Add the dependency in your `Cargo.toml`:
 cargo add open-feature-flagd
 cargo add open-feature
 ```
+
+### Cargo Features
+
+This crate uses cargo features to allow clients to include only the evaluation modes they need,
+keeping the dependency footprint minimal. By default, all features are enabled.
+
+| Feature | Description | Enabled by Default |
+|---------|-------------|-------------------|
+| `rpc` | gRPC-based remote evaluation via flagd service | ✅ |
+| `rest` | HTTP/OFREP-based remote evaluation | ✅ |
+| `in-process` | Local evaluation with embedded engine (includes File mode) | ✅ |
+
+#### Using Specific Features
+
+To include only specific evaluation modes:
+
+```toml
+# Only RPC evaluation
+open-feature-flagd = { version = "0.0.8", default-features = false, features = ["rpc"] }
+
+# Only REST evaluation (lightweight, no gRPC dependencies)
+open-feature-flagd = { version = "0.0.8", default-features = false, features = ["rest"] }
+
+# Only in-process/file evaluation
+open-feature-flagd = { version = "0.0.8", default-features = false, features = ["in-process"] }
+
+# RPC and REST (no local evaluation engine)
+open-feature-flagd = { version = "0.0.8", default-features = false, features = ["rpc", "rest"] }
+```
+
 Then integrate it into your application:
 
 ```rust

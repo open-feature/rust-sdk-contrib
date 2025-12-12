@@ -34,6 +34,36 @@
 //! cargo add open-feature-flagd
 //! cargo add open-feature
 //! ```
+//!
+//! ## Cargo Features
+//!
+//! This crate uses cargo features to allow clients to include only the evaluation modes they need,
+//! keeping the dependency footprint minimal. By default, all features are enabled.
+//!
+//! | Feature | Description | Enabled by Default |
+//! |---------|-------------|-------------------|
+//! | `rpc` | gRPC-based remote evaluation via flagd service | ✅ |
+//! | `rest` | HTTP/OFREP-based remote evaluation | ✅ |
+//! | `in-process` | Local evaluation with embedded engine (includes File mode) | ✅ |
+//!
+//! ### Using Specific Features
+//!
+//! To include only specific evaluation modes:
+//!
+//! ```toml
+//! # Only RPC evaluation
+//! open-feature-flagd = { version = "0.0.8", default-features = false, features = ["rpc"] }
+//!
+//! # Only REST evaluation (lightweight, no gRPC dependencies)
+//! open-feature-flagd = { version = "0.0.8", default-features = false, features = ["rest"] }
+//!
+//! # Only in-process/file evaluation
+//! open-feature-flagd = { version = "0.0.8", default-features = false, features = ["in-process"] }
+//!
+//! # RPC and REST (no local evaluation engine)
+//! open-feature-flagd = { version = "0.0.8", default-features = false, features = ["rpc", "rest"] }
+//! ```
+//!
 //! Then integrate it into your application:
 //!
 //! ```rust,no_run
@@ -187,30 +217,38 @@
 pub mod cache;
 pub mod error;
 pub mod resolver;
+
 use crate::error::FlagdError;
+#[cfg(feature = "in-process")]
 use crate::resolver::in_process::resolver::{FileResolver, InProcessResolver};
 use async_trait::async_trait;
+#[cfg(feature = "rpc")]
+use open_feature::EvaluationContextFieldValue;
 use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
-use open_feature::{
-    EvaluationContext, EvaluationContextFieldValue, EvaluationError, StructValue, Value,
-};
+use open_feature::{EvaluationContext, EvaluationError, StructValue, Value};
+#[cfg(feature = "rest")]
 use resolver::rest::RestResolver;
 use tracing::debug;
 use tracing::instrument;
 
+#[cfg(feature = "rpc")]
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
 pub use cache::{CacheService, CacheSettings, CacheType};
+#[cfg(feature = "rpc")]
 pub use resolver::rpc::RpcResolver;
 
 // Include the generated protobuf code
+#[cfg(any(feature = "rpc", feature = "in-process"))]
 pub mod flagd {
+    #[cfg(feature = "rpc")]
     pub mod evaluation {
         pub mod v1 {
             include!(concat!(env!("OUT_DIR"), "/flagd.evaluation.v1.rs"));
         }
     }
+    #[cfg(feature = "in-process")]
     pub mod sync {
         pub mod v1 {
             include!(concat!(env!("OUT_DIR"), "/flagd.sync.v1.rs"));
@@ -269,34 +307,25 @@ pub struct FlagdOptions {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ResolverType {
     /// Remote evaluation using gRPC connection to flagd service
+    #[cfg(feature = "rpc")]
     Rpc,
     /// Remote evaluation using REST connection to flagd service
+    #[cfg(feature = "rest")]
     Rest,
     /// Local evaluation with embedded flag engine using gRPC connection
+    #[cfg(feature = "in-process")]
     InProcess,
     /// Local evaluation with no external dependencies
+    #[cfg(feature = "in-process")]
     File,
 }
 impl Default for FlagdOptions {
     fn default() -> Self {
-        let resolver_type = if let Ok(r) = std::env::var("FLAGD_RESOLVER") {
-            match r.to_uppercase().as_str() {
-                "RPC" => ResolverType::Rpc,
-                "REST" => ResolverType::Rest,
-                "IN-PROCESS" | "INPROCESS" => ResolverType::InProcess,
-                "FILE" | "OFFLINE" => ResolverType::File,
-                _ => ResolverType::Rpc,
-            }
-        } else {
-            ResolverType::Rpc
-        };
+        let resolver_type = Self::default_resolver_type();
 
-        let port = match resolver_type {
-            ResolverType::Rpc => 8013,
-            ResolverType::InProcess => 8015,
-            _ => 8013,
-        };
+        let port = Self::default_port(&resolver_type);
 
+        #[allow(unused_mut)]
         let mut options = Self {
             host: std::env::var("FLAGD_HOST").unwrap_or_else(|_| "localhost".to_string()),
             port: std::env::var("FLAGD_PORT")
@@ -342,13 +371,56 @@ impl Default for FlagdOptions {
             provider_id: std::env::var("FLAGD_PROVIDER_ID").ok(),
         };
 
-        let resolver_env_set = std::env::var("FLAGD_RESOLVER").is_ok();
-        if options.source_configuration.is_some() && !resolver_env_set {
-            // Only override to File if FLAGD_RESOLVER wasn't explicitly set
-            options.resolver_type = ResolverType::File;
+        #[cfg(feature = "in-process")]
+        {
+            let resolver_env_set = std::env::var("FLAGD_RESOLVER").is_ok();
+            if options.source_configuration.is_some() && !resolver_env_set {
+                // Only override to File if FLAGD_RESOLVER wasn't explicitly set
+                options.resolver_type = ResolverType::File;
+            }
         }
 
         options
+    }
+}
+
+impl FlagdOptions {
+    fn default_resolver_type() -> ResolverType {
+        if let Ok(r) = std::env::var("FLAGD_RESOLVER") {
+            match r.to_uppercase().as_str() {
+                #[cfg(feature = "rpc")]
+                "RPC" => return ResolverType::Rpc,
+                #[cfg(feature = "rest")]
+                "REST" => return ResolverType::Rest,
+                #[cfg(feature = "in-process")]
+                "IN-PROCESS" | "INPROCESS" => return ResolverType::InProcess,
+                #[cfg(feature = "in-process")]
+                "FILE" | "OFFLINE" => return ResolverType::File,
+                _ => {}
+            }
+        }
+        // Return first available resolver type as default
+        #[cfg(feature = "rpc")]
+        return ResolverType::Rpc;
+        #[cfg(all(feature = "rest", not(feature = "rpc")))]
+        return ResolverType::Rest;
+        #[cfg(all(feature = "in-process", not(feature = "rpc"), not(feature = "rest")))]
+        return ResolverType::InProcess;
+        #[cfg(not(any(feature = "rpc", feature = "rest", feature = "in-process")))]
+        compile_error!("At least one resolver feature must be enabled: rpc, rest, or in-process");
+    }
+
+    fn default_port(resolver_type: &ResolverType) -> u16 {
+        match resolver_type {
+            #[cfg(feature = "rpc")]
+            ResolverType::Rpc => 8013,
+            #[cfg(feature = "in-process")]
+            ResolverType::InProcess => 8015,
+            #[cfg(feature = "rest")]
+            ResolverType::Rest => 8016,
+            #[allow(unreachable_patterns)]
+            _ => 8013,
+        }
     }
 }
 
@@ -367,6 +439,7 @@ impl FlagdProvider {
         debug!("Initializing FlagdProvider with options: {:?}", options);
 
         // Validate File resolver configuration
+        #[cfg(feature = "in-process")]
         if options.resolver_type == ResolverType::File && options.source_configuration.is_none() {
             return Err(FlagdError::Config(
                 "File resolver requires 'source_configuration' (FLAGD_OFFLINE_FLAG_SOURCE_PATH) to be set".to_string()
@@ -374,18 +447,22 @@ impl FlagdProvider {
         }
 
         let provider: Arc<dyn FeatureProvider + Send + Sync> = match options.resolver_type {
+            #[cfg(feature = "rpc")]
             ResolverType::Rpc => {
                 debug!("Using RPC resolver");
                 Arc::new(RpcResolver::new(&options).await?)
             }
+            #[cfg(feature = "rest")]
             ResolverType::Rest => {
                 debug!("Using REST resolver");
                 Arc::new(RestResolver::new(&options))
             }
+            #[cfg(feature = "in-process")]
             ResolverType::InProcess => {
                 debug!("Using in-process resolver");
                 Arc::new(InProcessResolver::new(&options).await?)
             }
+            #[cfg(feature = "in-process")]
             ResolverType::File => {
                 debug!("Using file resolver");
                 Arc::new(
@@ -417,7 +494,8 @@ impl std::fmt::Debug for FlagdProvider {
     }
 }
 
-fn convert_context(context: &EvaluationContext) -> Option<prost_types::Struct> {
+#[cfg(feature = "rpc")]
+pub(crate) fn convert_context(context: &EvaluationContext) -> Option<prost_types::Struct> {
     let mut fields = BTreeMap::new();
 
     if let Some(targeting_key) = &context.targeting_key {
@@ -456,7 +534,10 @@ fn convert_context(context: &EvaluationContext) -> Option<prost_types::Struct> {
     Some(prost_types::Struct { fields })
 }
 
-fn convert_proto_struct_to_struct_value(proto_struct: prost_types::Struct) -> StructValue {
+#[cfg(feature = "rpc")]
+pub(crate) fn convert_proto_struct_to_struct_value(
+    proto_struct: prost_types::Struct,
+) -> StructValue {
     let fields = proto_struct
         .fields
         .into_iter()
