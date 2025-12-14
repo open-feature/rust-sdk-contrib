@@ -2,9 +2,9 @@
 
 use std::time::Duration;
 use testcontainers::{
-    core::{logs::LogSource, wait::LogWaitStrategy, ContainerPort, Mount, WaitFor},
-    runners::AsyncRunner,
     ContainerAsync, GenericImage, ImageExt,
+    core::{ContainerPort, Mount, WaitFor, logs::LogSource, wait::LogWaitStrategy},
+    runners::AsyncRunner,
 };
 
 pub const FLAGD_SYNC_PORT: u16 = 8015;

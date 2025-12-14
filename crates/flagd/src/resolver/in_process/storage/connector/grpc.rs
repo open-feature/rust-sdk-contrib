@@ -332,8 +332,7 @@ mod tests {
         options.cache_settings = None;
 
         let target = format!("{}:{}", addr.ip(), addr.port());
-        let connector =
-            GrpcStreamConnector::new(target.clone(), None, &options, None);
+        let connector = GrpcStreamConnector::new(target.clone(), None, &options, None);
 
         // Create an upstream configuration with the invalid target.
         let config = UpstreamConfig::new(target, false).expect("failed to create upstream config");

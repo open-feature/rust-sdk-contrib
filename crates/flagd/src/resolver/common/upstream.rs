@@ -36,7 +36,10 @@ impl UpstreamConfig {
             let host = uri.host().unwrap_or("localhost");
             let port = uri.port_u16().unwrap_or(9211); // Use Envoy port directly
 
-            (format!("http://{}:{}", host, port), Some(authority.to_string()))
+            (
+                format!("http://{}:{}", host, port),
+                Some(authority.to_string()),
+            )
         } else {
             let parts: Vec<&str> = target.split(':').collect();
             let host = parts.first().unwrap_or(&"localhost").to_string();

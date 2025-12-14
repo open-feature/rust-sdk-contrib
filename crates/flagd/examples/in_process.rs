@@ -12,8 +12,8 @@
 mod common;
 
 use common::start_flagd_sync;
-use open_feature::provider::FeatureProvider;
 use open_feature::EvaluationContext;
+use open_feature::provider::FeatureProvider;
 use open_feature_flagd::{FlagdOptions, FlagdProvider, ResolverType};
 use std::time::Duration;
 
