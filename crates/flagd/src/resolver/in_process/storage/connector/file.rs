@@ -1,6 +1,6 @@
 use super::{Connector, QueuePayload, QueuePayloadType};
 use crate::error::FlagdError;
-use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher, event::ModifyKind};
+use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -67,9 +67,14 @@ impl FileConnector {
 
             match res {
                 Ok(event) => {
+                    // Match events that indicate file content changes
+                    // Include all Modify events to handle atomic writes (temp file → rename)
+                    // Note: We watch the parent directory and re-read our specific file on any
+                    // relevant event. This is intentional to handle editors that use atomic
+                    // writes (write to temp, rename over original).
                     let dominated_events = matches!(
                         event.kind,
-                        notify::EventKind::Modify(ModifyKind::Data(_))
+                        notify::EventKind::Modify(_)
                             | notify::EventKind::Create(_)
                             | notify::EventKind::Remove(_)
                     );

@@ -103,9 +103,21 @@ impl FlagStore {
                             let parsing_result = FlagParser::parse_string(&payload.flag_data)?;
                             let mut flags_write = self.flags.write().await;
                             let mut metadata_write = self.flag_set_metadata.write().await;
+                            let flag_keys: Vec<String> =
+                                parsing_result.flags.keys().cloned().collect();
                             *flags_write = parsing_result.flags;
                             *metadata_write = parsing_result.flag_set_metadata;
                             debug!("Successfully parsed {} flags", flags_write.len());
+
+                            // Send initial state change so FileResolver knows init completed
+                            let _ = self
+                                .state_sender
+                                .send(StorageStateChange {
+                                    storage_state: StorageState::Ok,
+                                    changed_flags_keys: flag_keys,
+                                    sync_metadata: payload.metadata.unwrap_or_default(),
+                                })
+                                .await;
                         }
                         QueuePayloadType::Error => {
                             error!("Error in initial sync: {}", payload.flag_data);

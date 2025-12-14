@@ -27,9 +27,10 @@ pub struct GrpcStreamConnector {
     retry_backoff_ms: u32,
     retry_backoff_max_ms: u32,
     retry_grace_period: u32,
-    stream_deadline_ms: u32,
-    authority: String,   // desired authority, e.g. "b-features-api.service"
-    provider_id: String, // provider identifier for sync requests
+    keep_alive_time_ms: u64,
+    authority: Option<String>, // optional authority for custom name resolution (e.g. envoy://)
+    provider_id: String,       // provider identifier for sync requests
+    channel: Arc<Mutex<Option<Channel>>>, // reusable channel for connection pooling
 }
 
 impl GrpcStreamConnector {
@@ -38,7 +39,7 @@ impl GrpcStreamConnector {
         target: String,
         selector: Option<String>,
         options: &FlagdOptions,
-        authority: String,
+        authority: Option<String>,
     ) -> Self {
         debug!("Creating new GrpcStreamConnector with target: {}", target);
         let (sender, receiver) = channel(1000);
@@ -51,12 +52,13 @@ impl GrpcStreamConnector {
             retry_backoff_ms: options.retry_backoff_ms,
             retry_backoff_max_ms: options.retry_backoff_max_ms,
             retry_grace_period: options.retry_grace_period,
-            stream_deadline_ms: options.stream_deadline_ms,
+            keep_alive_time_ms: options.keep_alive_time_ms,
             authority,
             provider_id: options
                 .provider_id
                 .clone()
                 .unwrap_or_else(|| "rust-flagd-provider".to_string()),
+            channel: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -81,12 +83,13 @@ impl GrpcStreamConnector {
             retry_backoff_ms: options.retry_backoff_ms,
             retry_backoff_max_ms: options.retry_backoff_max_ms,
             retry_grace_period: options.retry_grace_period,
-            stream_deadline_ms: options.stream_deadline_ms,
-            authority: "localhost".to_string(), // Unix sockets use localhost as authority
+            keep_alive_time_ms: options.keep_alive_time_ms,
+            authority: None, // Unix sockets don't need custom authority
             provider_id: options
                 .provider_id
                 .clone()
                 .unwrap_or_else(|| "rust-flagd-provider".to_string()),
+            channel: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -96,15 +99,31 @@ impl GrpcStreamConnector {
     ) -> Result<Channel, FlagdError> {
         debug!("Created endpoint: {:?}", config.endpoint().uri());
         let mut endpoint = config.endpoint().clone();
-        if self.stream_deadline_ms > 0 {
+
+        // Configure connection and transport settings for optimal streaming
+        endpoint = endpoint
+            // HTTP/2 adaptive flow control - auto-adjusts window sizes based on RTT
+            .http2_adaptive_window(true)
+            // Explicit connect timeout (separate from request timeout)
+            .connect_timeout(Duration::from_secs(CONNECTION_TIMEOUT_SECS))
+            // TCP keepalive for OS-level dead connection detection
+            .tcp_keepalive(Some(Duration::from_secs(60)));
+
+        // Configure HTTP/2 keepalive for long-lived streaming connections
+        // This keeps connections alive during idle periods and allows RPCs to start quickly
+        if self.keep_alive_time_ms > 0 {
             endpoint = endpoint
-                .http2_keep_alive_interval(Duration::from_millis(self.stream_deadline_ms as u64));
+                .http2_keep_alive_interval(Duration::from_millis(self.keep_alive_time_ms))
+                .keep_alive_timeout(Duration::from_secs(20))
+                .keep_alive_while_idle(true);
         }
-        // Use 'origin' to inject the desired authority. Since origin() expects a full URI,
-        // we prepend "http://" to the authority string.
-        let authority_uri = Uri::from_str(&format!("http://{}", self.authority))
-            .map_err(|e| FlagdError::Config(format!("Invalid authority URI: {}", e)))?;
-        endpoint = endpoint.origin(authority_uri);
+
+        // Only set origin if authority is provided (for custom name resolution like envoy://)
+        if let Some(ref authority) = self.authority {
+            let authority_uri = Uri::from_str(&format!("http://{}", authority))
+                .map_err(|e| FlagdError::Config(format!("Invalid authority URI: {}", e)))?;
+            endpoint = endpoint.origin(authority_uri);
+        }
 
         endpoint
             .timeout(Duration::from_secs(CONNECTION_TIMEOUT_SECS))
@@ -160,12 +179,33 @@ impl GrpcStreamConnector {
         ))
     }
 
-    async fn start_stream(&self) -> Result<(), FlagdError> {
-        debug!("Starting sync stream connection to {}", self.target);
+    /// Get or create a reusable channel connection
+    async fn get_or_create_channel(&self) -> Result<Channel, FlagdError> {
+        let mut channel_guard = self.channel.lock().await;
+        if let Some(ref channel) = *channel_guard {
+            debug!("Reusing existing channel connection");
+            return Ok(channel.clone());
+        }
+
+        debug!("Creating new channel connection to {}", self.target);
         let config = UpstreamConfig::new(self.target.clone(), true)?;
         let channel = self.connect_with_timeout_using(&config).await?;
-        debug!("Using authority: {}", self.authority);
-        // Create the gRPC client with no interceptor because the endpoint already carries the desired authority.
+        *channel_guard = Some(channel.clone());
+        Ok(channel)
+    }
+
+    /// Invalidate the cached channel (e.g., after connection failure)
+    async fn invalidate_channel(&self) {
+        let mut channel_guard = self.channel.lock().await;
+        *channel_guard = None;
+        debug!("Invalidated cached channel");
+    }
+
+    async fn start_stream(&self) -> Result<(), FlagdError> {
+        debug!("Starting sync stream connection to {}", self.target);
+        let channel = self.get_or_create_channel().await?;
+        debug!("Using authority: {:?}", self.authority);
+        // Reuse channel for better performance - avoids connection overhead on reconnects
         let mut client = FlagSyncServiceClient::new(channel);
         let request = tonic::Request::new(SyncFlagsRequest {
             provider_id: self.provider_id.clone(),
@@ -211,15 +251,18 @@ impl GrpcStreamConnector {
 
             match self.start_stream().await {
                 Ok(_) => {
-                    // If start_stream finishes gracefully (i.e. connection closed without error),
-                    // you might want to decide whether to try reconnecting or exit.
-                    debug!("Sync stream ended; reconnecting");
+                    // Stream ended gracefully - invalidate channel and reconnect
+                    debug!("Sync stream ended; invalidating channel and reconnecting");
+                    self.invalidate_channel().await;
+                    current_delay = self.retry_backoff_ms; // Reset backoff on graceful close
                 }
                 Err(e) => {
+                    // Error occurred - invalidate channel for fresh connection on retry
                     error!(
                         "Sync stream encountered error: {}. Retrying in {}ms",
                         e, current_delay
                     );
+                    self.invalidate_channel().await;
                 }
             }
             sleep(Duration::from_millis(current_delay as u64)).await;
@@ -290,7 +333,7 @@ mod tests {
 
         let target = format!("{}:{}", addr.ip(), addr.port());
         let connector =
-            GrpcStreamConnector::new(target.clone(), None, &options, "test-authority".to_string());
+            GrpcStreamConnector::new(target.clone(), None, &options, None);
 
         // Create an upstream configuration with the invalid target.
         let config = UpstreamConfig::new(target, false).expect("failed to create upstream config");

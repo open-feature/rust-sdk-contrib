@@ -125,7 +125,7 @@ impl InProcessResolver {
             upstream_config.endpoint().uri().to_string(),
             options.selector.clone(),
             options,
-            upstream_config.authority().to_string(),
+            upstream_config.authority(),
         );
 
         let (store, state_receiver) = FlagStore::new(Arc::new(connector));
