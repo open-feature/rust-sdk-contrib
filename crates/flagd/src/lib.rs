@@ -45,6 +45,7 @@
 //! | `rpc` | gRPC-based remote evaluation via flagd service | ✅ |
 //! | `rest` | HTTP/OFREP-based remote evaluation | ✅ |
 //! | `in-process` | Local evaluation with embedded engine (includes File mode) | ✅ |
+//! | `otel` | OpenTelemetry instrumentation (tracing spans & context propagation) | ❌ |
 //!
 //! ### Using Specific Features
 //!
@@ -62,6 +63,83 @@
 //!
 //! # RPC and REST (no local evaluation engine)
 //! open-feature-flagd = { version = "0.0.8", default-features = false, features = ["rpc", "rest"] }
+//!
+//! # With OpenTelemetry instrumentation
+//! open-feature-flagd = { version = "0.0.8", features = ["otel"] }
+//! ```
+//!
+//! ### OpenTelemetry Instrumentation
+//!
+//! The `otel` feature enables OpenTelemetry instrumentation for distributed tracing. When enabled, the provider:
+//!
+//! - Creates tracing spans for flag evaluations and gRPC/HTTP calls
+//! - Propagates trace context across service boundaries via HTTP headers
+//! - Records semantic attributes following OpenTelemetry conventions
+//!
+//! To use OpenTelemetry, configure a tracer provider in your application and use `tracing-opentelemetry`:
+//!
+//! ```rust,ignore
+//! use opentelemetry::global;
+//! use opentelemetry_sdk::trace::TracerProvider;
+//!
+//! // Configure your OpenTelemetry exporter (e.g., OTLP, Jaeger, Zipkin)
+//! let provider = TracerProvider::builder()
+//!     .with_simple_exporter(/* your exporter */)
+//!     .build();
+//! global::set_tracer_provider(provider);
+//! ```
+//!
+//! The instrumentation integrates with the `tracing` crate, so traces will automatically
+//! flow through your existing tracing infrastructure when using `tracing-opentelemetry`.
+//!
+//! #### Emitted Spans by Evaluation Mode
+//!
+//! **All Modes** emit a flag evaluation span:
+//!
+//! | Span Name | Attributes |
+//! |-----------|------------|
+//! | `evaluate {flag_key}` | `feature_flag.key`, `feature_flag.provider_name`, `feature_flag.provider_version`, `feature_flag.variant`, `resolver_type`, `otel.status_code`, `error.type` |
+//!
+//! **RPC Mode** additionally emits gRPC client spans:
+//!
+//! | Span Name | Attributes |
+//! |-----------|------------|
+//! | `{service}/{method}` | `rpc.system`, `rpc.service`, `rpc.method`, `server.address`, `server.port`, `rpc.grpc.status_code`, `otel.status_code`, `error.type` |
+//!
+//! **REST Mode** additionally emits HTTP client spans:
+//!
+//! | Span Name | Attributes |
+//! |-----------|------------|
+//! | `{method} {url}` | `http.request.method`, `url.full`, `server.address`, `http.response.status_code`, `otel.status_code`, `error.type` |
+//!
+//! **In-Process Mode** additionally emits gRPC client spans (for sync stream):
+//!
+//! | Span Name | Attributes |
+//! |-----------|------------|
+//! | `{service}/{method}` | `rpc.system`, `rpc.service`, `rpc.method`, `server.address`, `server.port`, `rpc.grpc.status_code`, `otel.status_code`, `error.type` |
+//!
+//! **File Mode** emits only the flag evaluation span (no network calls).
+//!
+//! #### Emitted Metrics
+//!
+//! The following OpenTelemetry metrics are emitted for all evaluation modes:
+//!
+//! | Metric Name | Type | Description | Attributes |
+//! |-------------|------|-------------|------------|
+//! | `feature_flag.evaluation_total` | Counter | Total number of flag evaluations | `feature_flag.key`, `feature_flag.provider_name`, `feature_flag.provider_version`, `feature_flag.variant`, `feature_flag.reason`, `resolver_type` |
+//! | `feature_flag.evaluation_duration` | Histogram | Duration of flag evaluations (seconds) | Same as above |
+//! | `feature_flag.evaluation_error_total` | Counter | Total number of failed evaluations | `feature_flag.key`, `feature_flag.provider_name`, `feature_flag.provider_version`, `resolver_type`, `error.type` |
+//!
+//! To use metrics, configure a meter provider in your application:
+//!
+//! ```rust,ignore
+//! use opentelemetry::global;
+//! use opentelemetry_sdk::metrics::SdkMeterProvider;
+//!
+//! let provider = SdkMeterProvider::builder()
+//!     .with_reader(/* your reader/exporter */)
+//!     .build();
+//! global::set_meter_provider(provider);
 //! ```
 //!
 //! Then integrate it into your application:
@@ -216,6 +294,8 @@
 
 pub mod cache;
 pub mod error;
+#[cfg(feature = "otel")]
+pub mod otel;
 pub mod resolver;
 
 use crate::error::FlagdError;
