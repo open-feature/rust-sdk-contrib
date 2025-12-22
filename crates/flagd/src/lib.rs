@@ -313,11 +313,14 @@ use tracing::instrument;
 
 #[cfg(feature = "rpc")]
 use std::collections::BTreeMap;
+use std::future::Future;
 use std::sync::Arc;
 
 pub use cache::{CacheService, CacheSettings, CacheType};
 #[cfg(feature = "rpc")]
 pub use resolver::rpc::RpcResolver;
+#[cfg(feature = "otel")]
+use tracing::Instrument;
 
 // Include the generated protobuf code
 #[cfg(any(feature = "rpc", feature = "in-process"))]
@@ -401,6 +404,23 @@ pub enum ResolverType {
     /// Local evaluation with no external dependencies
     #[cfg(feature = "in-process")]
     File,
+}
+
+impl ResolverType {
+    /// Returns the resolver type as a string label for telemetry
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            #[cfg(feature = "rpc")]
+            Self::Rpc => "rpc",
+            #[cfg(feature = "rest")]
+            Self::Rest => "rest",
+            #[cfg(feature = "in-process")]
+            Self::InProcess => "in-process",
+            #[cfg(feature = "in-process")]
+            Self::File => "file",
+        }
+    }
 }
 impl Default for FlagdOptions {
     fn default() -> Self {
@@ -525,6 +545,9 @@ pub struct FlagdProvider {
     provider: Arc<dyn FeatureProvider + Send + Sync>,
     /// Optional caching layer
     cache: Option<Arc<CacheService<Value>>>,
+    /// Resolver type label for telemetry (only when otel feature is enabled)
+    #[cfg(feature = "otel")]
+    resolver_type: &'static str,
 }
 
 impl FlagdProvider {
@@ -576,6 +599,8 @@ impl FlagdProvider {
             cache: options
                 .cache_settings
                 .map(|settings| Arc::new(CacheService::new(settings))),
+            #[cfg(feature = "otel")]
+            resolver_type: options.resolver_type.as_str(),
         })
     }
 }
@@ -667,6 +692,60 @@ impl FlagdProvider {
         }
         None
     }
+
+    async fn resolve_with_instrumentation<T, F, Fut>(
+        &self,
+        flag_key: &str,
+        context: &EvaluationContext,
+        from_cache: fn(Value) -> Option<T>,
+        to_cache: fn(&T) -> Value,
+        resolve: F,
+    ) -> Result<ResolutionDetails<T>, EvaluationError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<ResolutionDetails<T>, EvaluationError>>,
+    {
+        let eval = async {
+            if let Some(value) = self.get_cached_value(flag_key, context, from_cache).await {
+                debug!(flag_key, cached = true, "returning cached value");
+                return Ok(ResolutionDetails::new(value));
+            }
+
+            debug!(flag_key, cached = false, "resolving flag from provider");
+            let result = resolve().await?;
+
+            if let Some(cache) = &self.cache {
+                cache.add(flag_key, context, to_cache(&result.value)).await;
+            }
+
+            Ok(result)
+        };
+
+        #[cfg(feature = "otel")]
+        {
+            let span = crate::otel::make_flag_evaluation_span(flag_key, self.resolver_type);
+            let result: Result<ResolutionDetails<T>, EvaluationError> =
+                eval.instrument(span.clone()).await;
+            match &result {
+                Ok(details) => {
+                    if let Some(variant) = details.variant.as_deref() {
+                        crate::otel::record_evaluation_success(&span, variant);
+                    } else {
+                        crate::otel::record_evaluation_success_no_variant(&span);
+                    }
+                }
+                Err(err) => {
+                    crate::otel::record_evaluation_error(&span, &err.code.to_string());
+                }
+            }
+            result
+        }
+
+        #[cfg(not(feature = "otel"))]
+        {
+            eval.await
+        }
+    }
 }
 
 #[async_trait]
@@ -680,25 +759,17 @@ impl FeatureProvider for FlagdProvider {
         flag_key: &str,
         context: &EvaluationContext,
     ) -> Result<ResolutionDetails<bool>, EvaluationError> {
-        if let Some(value) = self
-            .get_cached_value(flag_key, context, |v| match v {
+        self.resolve_with_instrumentation(
+            flag_key,
+            context,
+            |v| match v {
                 Value::Bool(b) => Some(b),
                 _ => None,
-            })
-            .await
-        {
-            return Ok(ResolutionDetails::new(value));
-        }
-
-        let result = self.provider.resolve_bool_value(flag_key, context).await?;
-
-        if let Some(cache) = &self.cache {
-            cache
-                .add(flag_key, context, Value::Bool(result.value))
-                .await;
-        }
-
-        Ok(result)
+            },
+            |v| Value::Bool(*v),
+            || self.provider.resolve_bool_value(flag_key, context),
+        )
+        .await
     }
 
     async fn resolve_int_value(
@@ -706,23 +777,17 @@ impl FeatureProvider for FlagdProvider {
         flag_key: &str,
         context: &EvaluationContext,
     ) -> Result<ResolutionDetails<i64>, EvaluationError> {
-        if let Some(value) = self
-            .get_cached_value(flag_key, context, |v| match v {
+        self.resolve_with_instrumentation(
+            flag_key,
+            context,
+            |v| match v {
                 Value::Int(i) => Some(i),
                 _ => None,
-            })
-            .await
-        {
-            return Ok(ResolutionDetails::new(value));
-        }
-
-        let result = self.provider.resolve_int_value(flag_key, context).await?;
-
-        if let Some(cache) = &self.cache {
-            cache.add(flag_key, context, Value::Int(result.value)).await;
-        }
-
-        Ok(result)
+            },
+            |v| Value::Int(*v),
+            || self.provider.resolve_int_value(flag_key, context),
+        )
+        .await
     }
 
     async fn resolve_float_value(
@@ -730,25 +795,17 @@ impl FeatureProvider for FlagdProvider {
         flag_key: &str,
         context: &EvaluationContext,
     ) -> Result<ResolutionDetails<f64>, EvaluationError> {
-        if let Some(value) = self
-            .get_cached_value(flag_key, context, |v| match v {
+        self.resolve_with_instrumentation(
+            flag_key,
+            context,
+            |v| match v {
                 Value::Float(f) => Some(f),
                 _ => None,
-            })
-            .await
-        {
-            return Ok(ResolutionDetails::new(value));
-        }
-
-        let result = self.provider.resolve_float_value(flag_key, context).await?;
-
-        if let Some(cache) = &self.cache {
-            cache
-                .add(flag_key, context, Value::Float(result.value))
-                .await;
-        }
-
-        Ok(result)
+            },
+            |v| Value::Float(*v),
+            || self.provider.resolve_float_value(flag_key, context),
+        )
+        .await
     }
 
     async fn resolve_string_value(
@@ -756,28 +813,17 @@ impl FeatureProvider for FlagdProvider {
         flag_key: &str,
         context: &EvaluationContext,
     ) -> Result<ResolutionDetails<String>, EvaluationError> {
-        if let Some(value) = self
-            .get_cached_value(flag_key, context, |v| match v {
+        self.resolve_with_instrumentation(
+            flag_key,
+            context,
+            |v| match v {
                 Value::String(s) => Some(s),
                 _ => None,
-            })
-            .await
-        {
-            return Ok(ResolutionDetails::new(value));
-        }
-
-        let result = self
-            .provider
-            .resolve_string_value(flag_key, context)
-            .await?;
-
-        if let Some(cache) = &self.cache {
-            cache
-                .add(flag_key, context, Value::String(result.value.clone()))
-                .await;
-        }
-
-        Ok(result)
+            },
+            |v| Value::String(v.clone()),
+            || self.provider.resolve_string_value(flag_key, context),
+        )
+        .await
     }
 
     async fn resolve_struct_value(
@@ -785,27 +831,16 @@ impl FeatureProvider for FlagdProvider {
         flag_key: &str,
         context: &EvaluationContext,
     ) -> Result<ResolutionDetails<StructValue>, EvaluationError> {
-        if let Some(value) = self
-            .get_cached_value(flag_key, context, |v| match v {
+        self.resolve_with_instrumentation(
+            flag_key,
+            context,
+            |v| match v {
                 Value::Struct(s) => Some(s),
                 _ => None,
-            })
-            .await
-        {
-            return Ok(ResolutionDetails::new(value));
-        }
-
-        let result = self
-            .provider
-            .resolve_struct_value(flag_key, context)
-            .await?;
-
-        if let Some(cache) = &self.cache {
-            cache
-                .add(flag_key, context, Value::Struct(result.value.clone()))
-                .await;
-        }
-
-        Ok(result)
+            },
+            |v| Value::Struct(v.clone()),
+            || self.provider.resolve_struct_value(flag_key, context),
+        )
+        .await
     }
 }

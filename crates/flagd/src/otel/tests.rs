@@ -264,6 +264,172 @@ mod span_tests {
     }
 }
 
+/// Integration tests for provider evaluation spans
+#[cfg(test)]
+#[cfg(feature = "in-process")]
+mod provider_span_tests {
+    use crate::{FlagdOptions, FlagdProvider, ResolverType};
+    use fake_opentelemetry_collector::{FakeCollectorServer, setup_tracer_provider};
+    use open_feature::EvaluationContext;
+    use open_feature::provider::FeatureProvider;
+    use opentelemetry::trace::TracerProvider;
+    use std::time::Duration;
+    use tracing_subscriber::Layer;
+    use tracing_subscriber::Registry;
+    use tracing_subscriber::filter::LevelFilter;
+    use tracing_subscriber::layer::SubscriberExt;
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_flagd_provider_emits_evaluation_span() {
+        let mut fake_collector = FakeCollectorServer::start()
+            .await
+            .expect("fake collector started");
+
+        let tracer_provider = setup_tracer_provider(&fake_collector).await;
+
+        let telemetry_layer =
+            tracing_opentelemetry::layer().with_tracer(tracer_provider.tracer("flagd-test"));
+        let subscriber = Registry::default().with(telemetry_layer);
+        let _guard = tracing::subscriber::set_default(subscriber);
+
+        let temp_dir = tempfile::tempdir().expect("tempdir created");
+        let flag_path = temp_dir.path().join("flags.json");
+        std::fs::write(
+            &flag_path,
+            r#"{
+  "$schema": "https://flagd.dev/schema/v0/flags.json",
+  "flags": {
+    "basic-boolean": {
+      "state": "ENABLED",
+      "defaultVariant": "false",
+      "variants": {
+        "true": true,
+        "false": false
+      },
+      "targeting": {}
+    }
+  }
+}"#,
+        )
+        .expect("flags written");
+
+        let options = FlagdOptions {
+            resolver_type: ResolverType::File,
+            source_configuration: Some(flag_path.to_string_lossy().to_string()),
+            cache_settings: None,
+            ..Default::default()
+        };
+
+        let provider = FlagdProvider::new(options).await.expect("provider ready");
+        let context = EvaluationContext::default();
+        let result = provider
+            .resolve_bool_value("basic-boolean", &context)
+            .await
+            .expect("flag resolved");
+
+        assert!(!result.value, "expected flag value to be false");
+
+        drop(_guard);
+
+        let _ = tracer_provider.force_flush();
+        tracer_provider.shutdown().expect("shutdown ok");
+        drop(tracer_provider);
+
+        let spans = fake_collector
+            .exported_spans(1, Duration::from_secs(5))
+            .await;
+
+        assert!(!spans.is_empty(), "Provider should emit spans");
+
+        let eval_span = spans.iter().find(|s| s.name.contains("evaluate"));
+        assert!(
+            eval_span.is_some(),
+            "Should find evaluation span among: {:?}",
+            spans.iter().map(|s| &s.name).collect::<Vec<_>>()
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_debug_logs_become_span_events() {
+        let mut fake_collector = FakeCollectorServer::start()
+            .await
+            .expect("fake collector started");
+
+        let tracer_provider = setup_tracer_provider(&fake_collector).await;
+
+        // Enable TRACE level filter to capture all spans and events
+        // The filter must wrap the telemetry layer
+        let telemetry_layer = tracing_opentelemetry::layer()
+            .with_tracer(tracer_provider.tracer("flagd-test"))
+            .with_filter(LevelFilter::TRACE);
+        let subscriber = Registry::default().with(telemetry_layer);
+        let _guard = tracing::subscriber::set_default(subscriber);
+
+        let temp_dir = tempfile::tempdir().expect("tempdir created");
+        let flag_path = temp_dir.path().join("flags.json");
+        std::fs::write(
+            &flag_path,
+            r#"{
+  "$schema": "https://flagd.dev/schema/v0/flags.json",
+  "flags": {
+    "test-flag": {
+      "state": "ENABLED",
+      "defaultVariant": "on",
+      "variants": {
+        "on": true,
+        "off": false
+      },
+      "targeting": {}
+    }
+  }
+}"#,
+        )
+        .expect("flags written");
+
+        let options = FlagdOptions {
+            resolver_type: ResolverType::File,
+            source_configuration: Some(flag_path.to_string_lossy().to_string()),
+            cache_settings: None,
+            ..Default::default()
+        };
+
+        let provider = FlagdProvider::new(options).await.expect("provider ready");
+        let context = EvaluationContext::default();
+
+        // Resolve the flag - internal debug! logs should become span events
+        let _ = provider
+            .resolve_bool_value("test-flag", &context)
+            .await
+            .expect("flag resolved");
+
+        drop(_guard);
+
+        let _ = tracer_provider.force_flush();
+        tracer_provider.shutdown().expect("shutdown ok");
+        drop(tracer_provider);
+
+        let spans = fake_collector
+            .exported_spans(1, Duration::from_secs(5))
+            .await;
+
+        assert!(!spans.is_empty(), "Should have spans");
+
+        // Find the evaluation span
+        let eval_span = spans
+            .iter()
+            .find(|s| s.name.contains("evaluate"))
+            .expect("Should find evaluation span");
+
+        // Debug logs inside the span should appear as span events
+        // The FileResolver emits debug logs during evaluation
+        assert!(
+            !eval_span.events.is_empty(),
+            "Evaluation span should have events from debug! logs. Span: {:?}",
+            eval_span
+        );
+    }
+}
+
 /// Integration tests for the OtelGrpcLayer middleware
 #[cfg(test)]
 #[cfg(any(feature = "rpc", feature = "in-process"))]

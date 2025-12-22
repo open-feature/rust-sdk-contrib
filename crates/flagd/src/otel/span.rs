@@ -81,6 +81,11 @@ pub fn record_evaluation_success(span: &Span, variant: &str) {
     span.record(attributes::OTEL_STATUS_CODE, "OK");
 }
 
+/// Record successful evaluation without a variant (e.g., cached results)
+pub fn record_evaluation_success_no_variant(span: &Span) {
+    span.record(attributes::OTEL_STATUS_CODE, "OK");
+}
+
 /// Record evaluation error on a span
 pub fn record_evaluation_error(span: &Span, error: &str) {
     span.record(attributes::OTEL_STATUS_CODE, "ERROR");
