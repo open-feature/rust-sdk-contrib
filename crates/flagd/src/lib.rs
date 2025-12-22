@@ -45,6 +45,7 @@
 //! | `rpc` | gRPC-based remote evaluation via flagd service | ✅ |
 //! | `rest` | HTTP/OFREP-based remote evaluation | ✅ |
 //! | `in-process` | Local evaluation with embedded engine (includes File mode) | ✅ |
+//! | `otel` | OpenTelemetry instrumentation (tracing spans & context propagation) | ❌ |
 //!
 //! ### Using Specific Features
 //!
@@ -62,6 +63,83 @@
 //!
 //! # RPC and REST (no local evaluation engine)
 //! open-feature-flagd = { version = "0.0.8", default-features = false, features = ["rpc", "rest"] }
+//!
+//! # With OpenTelemetry instrumentation
+//! open-feature-flagd = { version = "0.0.8", features = ["otel"] }
+//! ```
+//!
+//! ### OpenTelemetry Instrumentation
+//!
+//! The `otel` feature enables OpenTelemetry instrumentation for distributed tracing. When enabled, the provider:
+//!
+//! - Creates tracing spans for flag evaluations and gRPC/HTTP calls
+//! - Propagates trace context across service boundaries via HTTP headers
+//! - Records semantic attributes following OpenTelemetry conventions
+//!
+//! To use OpenTelemetry, configure a tracer provider in your application and use `tracing-opentelemetry`:
+//!
+//! ```rust,ignore
+//! use opentelemetry::global;
+//! use opentelemetry_sdk::trace::TracerProvider;
+//!
+//! // Configure your OpenTelemetry exporter (e.g., OTLP, Jaeger, Zipkin)
+//! let provider = TracerProvider::builder()
+//!     .with_simple_exporter(/* your exporter */)
+//!     .build();
+//! global::set_tracer_provider(provider);
+//! ```
+//!
+//! The instrumentation integrates with the `tracing` crate, so traces will automatically
+//! flow through your existing tracing infrastructure when using `tracing-opentelemetry`.
+//!
+//! #### Emitted Spans by Evaluation Mode
+//!
+//! **All Modes** emit a flag evaluation span:
+//!
+//! | Span Name | Attributes |
+//! |-----------|------------|
+//! | `evaluate {flag_key}` | `feature_flag.key`, `feature_flag.provider_name`, `feature_flag.provider_version`, `feature_flag.variant`, `resolver_type`, `otel.status_code`, `error.type` |
+//!
+//! **RPC Mode** additionally emits gRPC client spans:
+//!
+//! | Span Name | Attributes |
+//! |-----------|------------|
+//! | `{service}/{method}` | `rpc.system`, `rpc.service`, `rpc.method`, `server.address`, `server.port`, `rpc.grpc.status_code`, `otel.status_code`, `error.type` |
+//!
+//! **REST Mode** additionally emits HTTP client spans:
+//!
+//! | Span Name | Attributes |
+//! |-----------|------------|
+//! | `{method} {url}` | `http.request.method`, `url.full`, `server.address`, `http.response.status_code`, `otel.status_code`, `error.type` |
+//!
+//! **In-Process Mode** additionally emits gRPC client spans (for sync stream):
+//!
+//! | Span Name | Attributes |
+//! |-----------|------------|
+//! | `{service}/{method}` | `rpc.system`, `rpc.service`, `rpc.method`, `server.address`, `server.port`, `rpc.grpc.status_code`, `otel.status_code`, `error.type` |
+//!
+//! **File Mode** emits only the flag evaluation span (no network calls).
+//!
+//! #### Emitted Metrics
+//!
+//! The following OpenTelemetry metrics are emitted for all evaluation modes:
+//!
+//! | Metric Name | Type | Description | Attributes |
+//! |-------------|------|-------------|------------|
+//! | `feature_flag.evaluation_total` | Counter | Total number of flag evaluations | `feature_flag.key`, `feature_flag.provider_name`, `feature_flag.provider_version`, `feature_flag.variant`, `feature_flag.reason`, `resolver_type` |
+//! | `feature_flag.evaluation_duration` | Histogram | Duration of flag evaluations (seconds) | Same as above |
+//! | `feature_flag.evaluation_error_total` | Counter | Total number of failed evaluations | `feature_flag.key`, `feature_flag.provider_name`, `feature_flag.provider_version`, `resolver_type`, `error.type` |
+//!
+//! To use metrics, configure a meter provider in your application:
+//!
+//! ```rust,ignore
+//! use opentelemetry::global;
+//! use opentelemetry_sdk::metrics::SdkMeterProvider;
+//!
+//! let provider = SdkMeterProvider::builder()
+//!     .with_reader(/* your reader/exporter */)
+//!     .build();
+//! global::set_meter_provider(provider);
 //! ```
 //!
 //! Then integrate it into your application:
@@ -216,6 +294,8 @@
 
 pub mod cache;
 pub mod error;
+#[cfg(feature = "otel")]
+pub mod otel;
 pub mod resolver;
 
 use crate::error::FlagdError;
@@ -233,11 +313,14 @@ use tracing::instrument;
 
 #[cfg(feature = "rpc")]
 use std::collections::BTreeMap;
+use std::future::Future;
 use std::sync::Arc;
 
 pub use cache::{CacheService, CacheSettings, CacheType};
 #[cfg(feature = "rpc")]
 pub use resolver::rpc::RpcResolver;
+#[cfg(feature = "otel")]
+use tracing::Instrument;
 
 // Include the generated protobuf code
 #[cfg(any(feature = "rpc", feature = "in-process"))]
@@ -321,6 +404,23 @@ pub enum ResolverType {
     /// Local evaluation with no external dependencies
     #[cfg(feature = "in-process")]
     File,
+}
+
+impl ResolverType {
+    /// Returns the resolver type as a string label for telemetry
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            #[cfg(feature = "rpc")]
+            Self::Rpc => "rpc",
+            #[cfg(feature = "rest")]
+            Self::Rest => "rest",
+            #[cfg(feature = "in-process")]
+            Self::InProcess => "in-process",
+            #[cfg(feature = "in-process")]
+            Self::File => "file",
+        }
+    }
 }
 impl Default for FlagdOptions {
     fn default() -> Self {
@@ -445,6 +545,9 @@ pub struct FlagdProvider {
     provider: Arc<dyn FeatureProvider + Send + Sync>,
     /// Optional caching layer
     cache: Option<Arc<CacheService<Value>>>,
+    /// Resolver type label for telemetry (only when otel feature is enabled)
+    #[cfg(feature = "otel")]
+    resolver_type: &'static str,
 }
 
 impl FlagdProvider {
@@ -496,6 +599,8 @@ impl FlagdProvider {
             cache: options
                 .cache_settings
                 .map(|settings| Arc::new(CacheService::new(settings))),
+            #[cfg(feature = "otel")]
+            resolver_type: options.resolver_type.as_str(),
         })
     }
 }
@@ -587,6 +692,60 @@ impl FlagdProvider {
         }
         None
     }
+
+    async fn resolve_with_instrumentation<T, F, Fut>(
+        &self,
+        flag_key: &str,
+        context: &EvaluationContext,
+        from_cache: fn(Value) -> Option<T>,
+        to_cache: fn(&T) -> Value,
+        resolve: F,
+    ) -> Result<ResolutionDetails<T>, EvaluationError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<ResolutionDetails<T>, EvaluationError>>,
+    {
+        let eval = async {
+            if let Some(value) = self.get_cached_value(flag_key, context, from_cache).await {
+                debug!(flag_key, cached = true, "returning cached value");
+                return Ok(ResolutionDetails::new(value));
+            }
+
+            debug!(flag_key, cached = false, "resolving flag from provider");
+            let result = resolve().await?;
+
+            if let Some(cache) = &self.cache {
+                cache.add(flag_key, context, to_cache(&result.value)).await;
+            }
+
+            Ok(result)
+        };
+
+        #[cfg(feature = "otel")]
+        {
+            let span = crate::otel::make_flag_evaluation_span(flag_key, self.resolver_type);
+            let result: Result<ResolutionDetails<T>, EvaluationError> =
+                eval.instrument(span.clone()).await;
+            match &result {
+                Ok(details) => {
+                    if let Some(variant) = details.variant.as_deref() {
+                        crate::otel::record_evaluation_success(&span, variant);
+                    } else {
+                        crate::otel::record_evaluation_success_no_variant(&span);
+                    }
+                }
+                Err(err) => {
+                    crate::otel::record_evaluation_error(&span, &err.code.to_string());
+                }
+            }
+            result
+        }
+
+        #[cfg(not(feature = "otel"))]
+        {
+            eval.await
+        }
+    }
 }
 
 #[async_trait]
@@ -600,25 +759,17 @@ impl FeatureProvider for FlagdProvider {
         flag_key: &str,
         context: &EvaluationContext,
     ) -> Result<ResolutionDetails<bool>, EvaluationError> {
-        if let Some(value) = self
-            .get_cached_value(flag_key, context, |v| match v {
+        self.resolve_with_instrumentation(
+            flag_key,
+            context,
+            |v| match v {
                 Value::Bool(b) => Some(b),
                 _ => None,
-            })
-            .await
-        {
-            return Ok(ResolutionDetails::new(value));
-        }
-
-        let result = self.provider.resolve_bool_value(flag_key, context).await?;
-
-        if let Some(cache) = &self.cache {
-            cache
-                .add(flag_key, context, Value::Bool(result.value))
-                .await;
-        }
-
-        Ok(result)
+            },
+            |v| Value::Bool(*v),
+            || self.provider.resolve_bool_value(flag_key, context),
+        )
+        .await
     }
 
     async fn resolve_int_value(
@@ -626,23 +777,17 @@ impl FeatureProvider for FlagdProvider {
         flag_key: &str,
         context: &EvaluationContext,
     ) -> Result<ResolutionDetails<i64>, EvaluationError> {
-        if let Some(value) = self
-            .get_cached_value(flag_key, context, |v| match v {
+        self.resolve_with_instrumentation(
+            flag_key,
+            context,
+            |v| match v {
                 Value::Int(i) => Some(i),
                 _ => None,
-            })
-            .await
-        {
-            return Ok(ResolutionDetails::new(value));
-        }
-
-        let result = self.provider.resolve_int_value(flag_key, context).await?;
-
-        if let Some(cache) = &self.cache {
-            cache.add(flag_key, context, Value::Int(result.value)).await;
-        }
-
-        Ok(result)
+            },
+            |v| Value::Int(*v),
+            || self.provider.resolve_int_value(flag_key, context),
+        )
+        .await
     }
 
     async fn resolve_float_value(
@@ -650,25 +795,17 @@ impl FeatureProvider for FlagdProvider {
         flag_key: &str,
         context: &EvaluationContext,
     ) -> Result<ResolutionDetails<f64>, EvaluationError> {
-        if let Some(value) = self
-            .get_cached_value(flag_key, context, |v| match v {
+        self.resolve_with_instrumentation(
+            flag_key,
+            context,
+            |v| match v {
                 Value::Float(f) => Some(f),
                 _ => None,
-            })
-            .await
-        {
-            return Ok(ResolutionDetails::new(value));
-        }
-
-        let result = self.provider.resolve_float_value(flag_key, context).await?;
-
-        if let Some(cache) = &self.cache {
-            cache
-                .add(flag_key, context, Value::Float(result.value))
-                .await;
-        }
-
-        Ok(result)
+            },
+            |v| Value::Float(*v),
+            || self.provider.resolve_float_value(flag_key, context),
+        )
+        .await
     }
 
     async fn resolve_string_value(
@@ -676,28 +813,17 @@ impl FeatureProvider for FlagdProvider {
         flag_key: &str,
         context: &EvaluationContext,
     ) -> Result<ResolutionDetails<String>, EvaluationError> {
-        if let Some(value) = self
-            .get_cached_value(flag_key, context, |v| match v {
+        self.resolve_with_instrumentation(
+            flag_key,
+            context,
+            |v| match v {
                 Value::String(s) => Some(s),
                 _ => None,
-            })
-            .await
-        {
-            return Ok(ResolutionDetails::new(value));
-        }
-
-        let result = self
-            .provider
-            .resolve_string_value(flag_key, context)
-            .await?;
-
-        if let Some(cache) = &self.cache {
-            cache
-                .add(flag_key, context, Value::String(result.value.clone()))
-                .await;
-        }
-
-        Ok(result)
+            },
+            |v| Value::String(v.clone()),
+            || self.provider.resolve_string_value(flag_key, context),
+        )
+        .await
     }
 
     async fn resolve_struct_value(
@@ -705,27 +831,16 @@ impl FeatureProvider for FlagdProvider {
         flag_key: &str,
         context: &EvaluationContext,
     ) -> Result<ResolutionDetails<StructValue>, EvaluationError> {
-        if let Some(value) = self
-            .get_cached_value(flag_key, context, |v| match v {
+        self.resolve_with_instrumentation(
+            flag_key,
+            context,
+            |v| match v {
                 Value::Struct(s) => Some(s),
                 _ => None,
-            })
-            .await
-        {
-            return Ok(ResolutionDetails::new(value));
-        }
-
-        let result = self
-            .provider
-            .resolve_struct_value(flag_key, context)
-            .await?;
-
-        if let Some(cache) = &self.cache {
-            cache
-                .add(flag_key, context, Value::Struct(result.value.clone()))
-                .await;
-        }
-
-        Ok(result)
+            },
+            |v| Value::Struct(v.clone()),
+            || self.provider.resolve_struct_value(flag_key, context),
+        )
+        .await
     }
 }
