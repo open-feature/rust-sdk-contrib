@@ -199,7 +199,7 @@ Configurations can be provided as constructor options or via environment variabl
 | TLS                                     | FLAGD_TLS                               | boolean                           | false                               | RPC, In-Process                |
 | Socket Path                             | FLAGD_SOCKET_PATH                       | string                            | ""                                  | RPC                            |
 | Certificate Path                        | FLAGD_SERVER_CERT_PATH                  | string                            | ""                                  | RPC, In-Process                |
-| Cache Type (LRU / In-Memory / Disabled) | FLAGD_CACHE                             | string ("lru", "mem", "disabled") | lru                                 | RPC, In-Process, File          |
+| Cache Type (LRU / In-Memory / Disabled) | FLAGD_CACHE                             | string ("lru", "mem", "disabled") | In-Process: disabled, others: lru   | RPC, In-Process, File          |
 | Cache TTL (Seconds)                     | FLAGD_CACHE_TTL                         | number                            | 60                                  | RPC, In-Process, File          |
 | Max Cache Size                          | FLAGD_MAX_CACHE_SIZE                    | number                            | 1000                                | RPC, In-Process, File          |
 | Offline File Path                       | FLAGD_OFFLINE_FLAG_SOURCE_PATH          | string                            | ""                                  | File                           |

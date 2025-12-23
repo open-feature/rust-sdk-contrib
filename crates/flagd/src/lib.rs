@@ -199,7 +199,7 @@
 //! | TLS                                     | FLAGD_TLS                               | boolean                           | false                               | RPC, In-Process                |
 //! | Socket Path                             | FLAGD_SOCKET_PATH                       | string                            | ""                                  | RPC                            |
 //! | Certificate Path                        | FLAGD_SERVER_CERT_PATH                  | string                            | ""                                  | RPC, In-Process                |
-//! | Cache Type (LRU / In-Memory / Disabled) | FLAGD_CACHE                             | string ("lru", "mem", "disabled") | lru                                 | RPC, In-Process, File          |
+//! | Cache Type (LRU / In-Memory / Disabled) | FLAGD_CACHE                             | string ("lru", "mem", "disabled") | In-Process: disabled, others: lru   | RPC, In-Process, File          |
 //! | Cache TTL (Seconds)                     | FLAGD_CACHE_TTL                         | number                            | 60                                  | RPC, In-Process, File          |
 //! | Max Cache Size                          | FLAGD_MAX_CACHE_SIZE                    | number                            | 1000                                | RPC, In-Process, File          |
 //! | Offline File Path                       | FLAGD_OFFLINE_FLAG_SOURCE_PATH          | string                            | ""                                  | File                           |
@@ -297,6 +297,9 @@ pub struct FlagdOptions {
     /// The deadline in milliseconds for event streaming operations. Set to 0 to disable.
     /// Recommended to prevent infrastructure from killing idle connections.
     pub stream_deadline_ms: u32,
+    /// HTTP/2 keepalive time in milliseconds. Sends pings to keep connections alive during
+    /// idle periods, allowing RPCs to start quickly without delay. Set to 0 to disable.
+    pub keep_alive_time_ms: u64,
     /// Offline polling interval in milliseconds
     pub offline_poll_interval_ms: Option<u32>,
     /// Provider ID for identifying this provider instance to flagd
@@ -358,6 +361,10 @@ impl Default for FlagdOptions {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(600000),
+            keep_alive_time_ms: std::env::var("FLAGD_KEEP_ALIVE_TIME_MS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0), // Disabled by default, per gherkin spec
             socket_path: std::env::var("FLAGD_SOCKET_PATH").ok(),
             selector: std::env::var("FLAGD_SOURCE_SELECTOR").ok(),
             cache_settings: Some(CacheSettings::default()),
@@ -377,6 +384,13 @@ impl Default for FlagdOptions {
             if options.source_configuration.is_some() && !resolver_env_set {
                 // Only override to File if FLAGD_RESOLVER wasn't explicitly set
                 options.resolver_type = ResolverType::File;
+            }
+            // Disable caching for in-process/file modes per spec (caching is RPC-only)
+            if matches!(
+                options.resolver_type,
+                ResolverType::InProcess | ResolverType::File
+            ) {
+                options.cache_settings = None;
             }
         }
 

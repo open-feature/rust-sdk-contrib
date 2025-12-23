@@ -1,22 +1,24 @@
 use super::feature_flag::FeatureFlag;
 use super::feature_flag::ParsingResult;
-use anyhow::Result;
+use crate::error::FlagdError;
 use serde_json::{Map, Value};
 use std::collections::HashMap;
 
 pub struct FlagParser;
 
 impl FlagParser {
-    pub fn parse_string(configuration: &str) -> Result<ParsingResult> {
+    pub fn parse_string(configuration: &str) -> Result<ParsingResult, FlagdError> {
         let value: Value = serde_json::from_str(configuration)?;
         let obj = value
             .as_object()
-            .ok_or_else(|| anyhow::anyhow!("Invalid JSON structure"))?;
+            .ok_or_else(|| FlagdError::Parse("Invalid JSON structure".to_string()))?;
 
         let flags = obj
             .get("flags")
             .and_then(|v| v.as_object())
-            .ok_or_else(|| anyhow::anyhow!("No flag configurations found in the payload"))?;
+            .ok_or_else(|| {
+                FlagdError::Parse("No flag configurations found in the payload".to_string())
+            })?;
 
         let flag_set_metadata = obj
             .get("metadata")
