@@ -42,7 +42,7 @@ jobs:
         path: ${{ fromJSON(needs.release-please.outputs.paths_released || '[]') }}
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
       
