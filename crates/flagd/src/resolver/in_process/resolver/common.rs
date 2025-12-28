@@ -1,25 +1,11 @@
 use flagd_evaluator::evaluation::{
     ErrorCode as EvaluatorErrorCode, EvaluationResult, ResolutionReason as EvaluatorReason,
 };
-use flagd_evaluator::model::FeatureFlag;
 use open_feature::{
     EvaluationContext, EvaluationError, EvaluationErrorCode, EvaluationReason, FlagMetadata,
     FlagMetadataValue, StructValue, Value,
 };
 use serde_json::Value as JsonValue;
-use std::collections::HashMap;
-
-/// Helper to create an empty FeatureFlag for a given key when one doesn't exist
-pub fn empty_flag(key: &str) -> FeatureFlag {
-    FeatureFlag {
-        key: Some(key.to_string()),
-        state: "DISABLED".to_string(),
-        default_variant: None,
-        variants: Default::default(),
-        targeting: None,
-        metadata: Default::default(),
-    }
-}
 
 /// Convert EvaluationContextFieldValue to JsonValue recursively
 fn context_field_to_json(value: &open_feature::EvaluationContextFieldValue) -> JsonValue {
@@ -170,20 +156,3 @@ pub fn json_to_metadata_value(v: &JsonValue) -> Option<FlagMetadataValue> {
     }
 }
 
-/// Get flag and metadata from evaluator storage
-pub fn get_flag_and_metadata(
-    flag_key: &str,
-) -> (FeatureFlag, HashMap<String, serde_json::Value>) {
-    let state = flagd_evaluator::storage::get_flag_state();
-    let flag = state
-        .as_ref()
-        .and_then(|s| s.flags.get(flag_key))
-        .cloned()
-        .unwrap_or_else(|| empty_flag(flag_key));
-    let metadata = state
-        .as_ref()
-        .map(|s| &s.flag_set_metadata)
-        .cloned()
-        .unwrap_or_default();
-    (flag, metadata)
-}

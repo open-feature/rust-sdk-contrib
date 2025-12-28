@@ -3,12 +3,9 @@ use crate::resolver::in_process::resolver::common;
 use crate::{CacheService, FlagdOptions};
 use anyhow::Result;
 use async_trait::async_trait;
-use flagd_evaluator::evaluation::{
-    evaluate_bool_flag, evaluate_float_flag, evaluate_flag, evaluate_int_flag,
-    evaluate_string_flag, EvaluationResult,
-};
+use flagd_evaluator::types::EvaluationResult;
 use flagd_evaluator::model::ParsingResult;
-use flagd_evaluator::storage::{update_flag_state, ValidationMode};
+use flagd_evaluator::ValidationMode;
 use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
 use open_feature::{EvaluationContext, EvaluationError, Value};
 use serde_json::Value as JsonValue;
@@ -22,21 +19,14 @@ use crate::resolver::in_process::storage::connector::{Connector, QueuePayloadTyp
 pub struct InProcessResolver {
     /// Connector for syncing flag configuration from gRPC
     connector: Arc<GrpcStreamConnector>,
+    /// Instance-based flag evaluator with its own state and validation mode
+    evaluator: Arc<tokio::sync::RwLock<flagd_evaluator::FlagEvaluator>>,
     metadata: ProviderMetadata,
     cache: Option<Arc<CacheService<Value>>>,
 }
 
 impl InProcessResolver {
     pub async fn new(options: &FlagdOptions) -> Result<Self> {
-        // Set validation mode to permissive to match other providers
-        // NOTE: This sets a thread-local global state. If multiple resolver instances
-        // are created in the same thread with different validation requirements, this
-        // could cause issues. Currently both InProcessResolver and FileResolver use
-        // Permissive mode, so this is not a problem in practice. A future improvement
-        // would be to make validation mode configurable per FlagdOptions and pass it
-        // to evaluator functions, or for flagd-evaluator to support per-instance config.
-        flagd_evaluator::storage::set_validation_mode(ValidationMode::Permissive);
-
         let connector = match &options.socket_path {
             Some(_) => {
                 return Err(anyhow::anyhow!(
@@ -50,6 +40,11 @@ impl InProcessResolver {
             .cache_settings
             .clone()
             .map(|settings| Arc::new(CacheService::new(settings)));
+
+        // Create evaluator instance with permissive validation mode
+        let evaluator = Arc::new(tokio::sync::RwLock::new(
+            flagd_evaluator::FlagEvaluator::new(ValidationMode::Permissive)
+        ));
 
         // Initialize the connector to start syncing
         connector.init().await?;
@@ -66,7 +61,8 @@ impl InProcessResolver {
                         debug!("Received initial flag configuration");
                         match ParsingResult::parse(&payload.flag_data) {
                             Ok(_) => {
-                                if let Err(e) = update_flag_state(&payload.flag_data) {
+                                let mut eval = evaluator.write().await;
+                                if let Err(e) = eval.update_state(&payload.flag_data) {
                                     return Err(anyhow::anyhow!("Failed to update flag state: {}", e));
                                 }
                             }
@@ -89,6 +85,7 @@ impl InProcessResolver {
         // Spawn task to handle subsequent config updates
         let stream_clone = stream.clone();
         let cache_clone = cache.clone();
+        let evaluator_clone = evaluator.clone();
         tokio::spawn(async move {
             let mut receiver_opt = stream_clone.lock().await;
             if let Some(receiver) = receiver_opt.as_mut() {
@@ -99,7 +96,8 @@ impl InProcessResolver {
                         // Parse and update state in evaluator
                         match ParsingResult::parse(&payload.flag_data) {
                             Ok(_) => {
-                                if let Err(e) = update_flag_state(&payload.flag_data) {
+                                let mut eval = evaluator_clone.write().await;
+                                if let Err(e) = eval.update_state(&payload.flag_data) {
                                     tracing::error!("Failed to update flag state: {}", e);
                                 } else {
                                     // Clear cache when flags update
@@ -107,6 +105,7 @@ impl InProcessResolver {
                                         cache.purge().await;
                                     }
                                 }
+                                drop(eval); // Explicitly drop lock before continuing
                             }
                             Err(e) => {
                                 tracing::error!("Failed to parse flag configuration: {}", e);
@@ -119,6 +118,7 @@ impl InProcessResolver {
 
         Ok(Self {
             connector,
+            evaluator,
             metadata: ProviderMetadata::new("flagd"),
             cache,
         })
@@ -158,7 +158,7 @@ impl InProcessResolver {
         &self,
         flag_key: &str,
         context: &EvaluationContext,
-        evaluator_fn: impl Fn(&serde_json::Map<String, JsonValue>) -> EvaluationResult,
+        evaluator_fn: impl Fn(&flagd_evaluator::FlagEvaluator, &JsonValue) -> EvaluationResult,
         value_extractor: impl Fn(&JsonValue) -> Option<T>,
         cache_value_fn: impl Fn(T) -> Value,
     ) -> Result<ResolutionDetails<T>, EvaluationError>
@@ -183,12 +183,11 @@ impl InProcessResolver {
 
         // Build context for evaluator
         let ctx_json = common::build_context_json(context);
-        let ctx_map = ctx_json.as_object().unwrap_or_else(|| {
-            panic!("build_context_json should always return an object")
-        });
 
-        // Call evaluator (no clone needed)
-        let result = evaluator_fn(ctx_map);
+        // Get read lock on evaluator and call evaluation function
+        let eval = self.evaluator.read().await;
+        let result = evaluator_fn(&*eval, &ctx_json);
+        drop(eval); // Release lock before awaiting
 
         // Convert result to details
         let details = common::result_to_details(&result, value_extractor)?;
@@ -218,10 +217,7 @@ impl FeatureProvider for InProcessResolver {
         self.resolve_value(
             flag_key,
             context,
-            |ctx| {
-                let (flag, metadata) = common::get_flag_and_metadata(flag_key);
-                evaluate_bool_flag(&flag, &JsonValue::Object(ctx.clone()), &metadata)
-            },
+            |eval, ctx| eval.evaluate_bool(flag_key, ctx),
             |v| v.as_bool(),
             Value::Bool,
         )
@@ -236,10 +232,7 @@ impl FeatureProvider for InProcessResolver {
         self.resolve_value(
             flag_key,
             context,
-            |ctx| {
-                let (flag, metadata) = common::get_flag_and_metadata(flag_key);
-                evaluate_string_flag(&flag, &JsonValue::Object(ctx.clone()), &metadata)
-            },
+            |eval, ctx| eval.evaluate_string(flag_key, ctx),
             |v| v.as_str().map(String::from),
             Value::String,
         )
@@ -254,10 +247,7 @@ impl FeatureProvider for InProcessResolver {
         self.resolve_value(
             flag_key,
             context,
-            |ctx| {
-                let (flag, metadata) = common::get_flag_and_metadata(flag_key);
-                evaluate_int_flag(&flag, &JsonValue::Object(ctx.clone()), &metadata)
-            },
+            |eval, ctx| eval.evaluate_int(flag_key, ctx),
             |v| v.as_i64(),
             Value::Int,
         )
@@ -272,10 +262,7 @@ impl FeatureProvider for InProcessResolver {
         self.resolve_value(
             flag_key,
             context,
-            |ctx| {
-                let (flag, metadata) = common::get_flag_and_metadata(flag_key);
-                evaluate_float_flag(&flag, &JsonValue::Object(ctx.clone()), &metadata)
-            },
+            |eval, ctx| eval.evaluate_float(flag_key, ctx),
             |v| v.as_f64(),
             Value::Float,
         )
@@ -290,10 +277,7 @@ impl FeatureProvider for InProcessResolver {
         self.resolve_value(
             flag_key,
             context,
-            |ctx| {
-                let (flag, metadata) = common::get_flag_and_metadata(flag_key);
-                evaluate_flag(&flag, &JsonValue::Object(ctx.clone()), &metadata)
-            },
+            |eval, ctx| eval.evaluate_flag(flag_key, ctx),
             |v| {
                 v.as_object().map(|obj| {
                     let fields = obj
