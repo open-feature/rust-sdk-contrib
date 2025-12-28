@@ -27,6 +27,12 @@ pub struct FileResolver {
 impl FileResolver {
     pub async fn new(source_path: String, cache_settings: Option<CacheSettings>) -> Result<Self> {
         // Set validation mode to permissive to match other providers
+        // NOTE: This sets a thread-local global state. If multiple resolver instances
+        // are created in the same thread with different validation requirements, this
+        // could cause issues. Currently both InProcessResolver and FileResolver use
+        // Permissive mode, so this is not a problem in practice. A future improvement
+        // would be to make validation mode configurable per CacheSettings and pass it
+        // to evaluator functions, or for flagd-evaluator to support per-instance config.
         flagd_evaluator::storage::set_validation_mode(ValidationMode::Permissive);
 
         let connector = Arc::new(FileConnector::new(source_path));
