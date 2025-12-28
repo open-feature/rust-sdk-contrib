@@ -1,164 +1,283 @@
-use crate::resolver::in_process::model::value_converter::ValueConverter;
 use crate::resolver::in_process::storage::connector::file::FileConnector;
-use crate::resolver::in_process::storage::{FlagStore, StorageState, StorageStateChange};
-use crate::resolver::in_process::targeting::Operator;
+use crate::resolver::in_process::storage::connector::{Connector, QueuePayloadType};
 use crate::{CacheService, CacheSettings};
 use anyhow::Result;
 use async_trait::async_trait;
+use flagd_evaluator::evaluation::{
+    evaluate_bool_flag, evaluate_float_flag, evaluate_flag, evaluate_int_flag,
+    evaluate_string_flag, ErrorCode as EvaluatorErrorCode, EvaluationResult,
+    ResolutionReason as EvaluatorReason,
+};
+use flagd_evaluator::model::{FeatureFlag, ParsingResult};
+use flagd_evaluator::storage::{update_flag_state, ValidationMode};
 use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
-use open_feature::{EvaluationContext, EvaluationError, EvaluationErrorCode, StructValue, Value};
+use open_feature::{
+    EvaluationContext, EvaluationError, EvaluationErrorCode, EvaluationReason, FlagMetadata,
+    FlagMetadataValue, StructValue, Value,
+};
+use serde_json::Value as JsonValue;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::debug;
 
+/// Helper to create an empty FeatureFlag for a given key when one doesn't exist
+fn empty_flag(key: &str) -> FeatureFlag {
+    FeatureFlag {
+        key: Some(key.to_string()),
+        state: "DISABLED".to_string(),
+        default_variant: None,
+        variants: Default::default(),
+        targeting: None,
+        metadata: Default::default(),
+    }
+}
+
+/// File-based resolver using the native flagd-evaluator
 pub struct FileResolver {
-    store: Arc<FlagStore>,
-    operator: Operator,
+    /// Connector for watching file changes
+    connector: Arc<FileConnector>,
     metadata: ProviderMetadata,
     cache: Option<Arc<CacheService<Value>>>,
-    state_receiver: Arc<Mutex<tokio::sync::mpsc::Receiver<StorageStateChange>>>,
 }
+
 impl FileResolver {
     pub async fn new(source_path: String, cache_settings: Option<CacheSettings>) -> Result<Self> {
-        let connector = FileConnector::new(source_path);
-        let (store, mut state_receiver) = FlagStore::new(Arc::new(connector));
-        let store = Arc::new(store);
+        // Set validation mode to permissive to match other providers
+        flagd_evaluator::storage::set_validation_mode(ValidationMode::Permissive);
 
-        store.init().await?;
-
-        // Wait for initial state update with timeout
-        if let Ok(Some(state_change)) =
-            tokio::time::timeout(std::time::Duration::from_secs(5), state_receiver.recv()).await
-        {
-            if state_change.storage_state != StorageState::Ok {
-                return Err(anyhow::anyhow!("Failed to initialize flag store"));
-            }
-        } else {
-            return Err(anyhow::anyhow!("Timeout waiting for initial flag state"));
-        }
-
+        let connector = Arc::new(FileConnector::new(source_path));
         let cache = cache_settings.map(|settings| Arc::new(CacheService::new(settings)));
 
+        // Initialize the connector to start watching the file
+        connector.init().await?;
+
+        // Get the stream and wait for the initial sync
+        let stream = connector.get_stream();
+        let mut receiver_opt = stream.lock().await;
+
+        // Wait for initial sync with timeout
+        if let Some(receiver) = receiver_opt.as_mut() {
+            match tokio::time::timeout(std::time::Duration::from_secs(5), receiver.recv()).await {
+                Ok(Some(payload)) => {
+                    if payload.payload_type == QueuePayloadType::Data {
+                        debug!("Received initial flag configuration from file");
+                        match ParsingResult::parse(&payload.flag_data) {
+                            Ok(_) => {
+                                if let Err(e) = update_flag_state(&payload.flag_data) {
+                                    return Err(anyhow::anyhow!("Failed to update flag state: {}", e));
+                                }
+                            }
+                            Err(e) => {
+                                return Err(anyhow::anyhow!("Failed to parse initial flag configuration: {}", e));
+                            }
+                        }
+                    } else {
+                        return Err(anyhow::anyhow!("Error loading initial flag configuration"));
+                    }
+                }
+                Ok(None) => {
+                    return Err(anyhow::anyhow!("No initial flag configuration received"));
+                }
+                Err(_) => {
+                    return Err(anyhow::anyhow!("Timeout waiting for initial flag state"));
+                }
+            }
+        }
+        drop(receiver_opt); // Release the lock before spawning
+
+        // Spawn task to handle subsequent config updates
+        let stream_clone = stream.clone();
+        let cache_clone = cache.clone();
+        tokio::spawn(async move {
+            let mut receiver_opt = stream_clone.lock().await;
+            if let Some(receiver) = receiver_opt.as_mut() {
+                while let Some(payload) = receiver.recv().await {
+                    if payload.payload_type == QueuePayloadType::Data {
+                        debug!("Received flag configuration update from file");
+
+                        // Parse and update state in evaluator
+                        match ParsingResult::parse(&payload.flag_data) {
+                            Ok(_) => {
+                                if let Err(e) = update_flag_state(&payload.flag_data) {
+                                    tracing::error!("Failed to update flag state: {}", e);
+                                } else {
+                                    // Clear cache when flags update
+                                    if let Some(cache) = &cache_clone {
+                                        cache.purge().await;
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to parse flag configuration: {}", e);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
         Ok(Self {
-            store,
-            operator: Operator::new(),
+            connector,
             metadata: ProviderMetadata::new("flagd"),
             cache,
-            state_receiver: Arc::new(Mutex::new(state_receiver)),
         })
     }
 
-    /// Check for flag updates and clear cache if needed (non-blocking)
-    async fn check_for_updates(&self) {
-        if self.cache.is_none() {
-            return;
+    async fn get_cached_value<T>(
+        &self,
+        flag_key: &str,
+        context: &EvaluationContext,
+        value_converter: impl Fn(&Value) -> Option<T>,
+    ) -> Option<T> {
+        if let Some(cache) = &self.cache
+            && let Some(cached_value) = cache.get(flag_key, context).await
+        {
+            return value_converter(&cached_value);
+        }
+        None
+    }
+
+    /// Build context JSON for evaluator from OpenFeature context
+    fn build_context_json(context: &EvaluationContext) -> JsonValue {
+        let mut root = serde_json::Map::new();
+
+        // Add targeting key if present
+        if let Some(targeting_key) = &context.targeting_key {
+            root.insert("targetingKey".to_string(), JsonValue::String(targeting_key.clone()));
         }
 
-        let mut receiver = self.state_receiver.lock().await;
+        // Add custom fields
+        for (key, value) in &context.custom_fields {
+            use open_feature::EvaluationContextFieldValue;
+            let json_value = match value {
+                EvaluationContextFieldValue::String(s) => JsonValue::String(s.clone()),
+                EvaluationContextFieldValue::Bool(b) => JsonValue::Bool(*b),
+                EvaluationContextFieldValue::Int(i) => JsonValue::Number((*i).into()),
+                EvaluationContextFieldValue::Float(f) => {
+                    JsonValue::Number(serde_json::Number::from_f64(*f).unwrap())
+                }
+                EvaluationContextFieldValue::DateTime(dt) => {
+                    JsonValue::String(dt.to_string())
+                }
+                EvaluationContextFieldValue::Struct(_) => {
+                    // For now, convert struct to string
+                    JsonValue::String(format!("{:?}", value))
+                }
+            };
+            root.insert(key.clone(), json_value);
+        }
 
-        // Drain all pending state changes (non-blocking)
-        let mut should_clear = false;
-        while let Ok(state_change) = receiver.try_recv() {
-            if state_change.storage_state == StorageState::Ok {
-                should_clear = true;
+        JsonValue::Object(root)
+    }
+
+    /// Map evaluator reason to OpenFeature reason
+    fn map_reason(reason: &EvaluatorReason) -> Option<EvaluationReason> {
+        match reason {
+            EvaluatorReason::Static => Some(EvaluationReason::Static),
+            EvaluatorReason::Default => Some(EvaluationReason::Default),
+            EvaluatorReason::TargetingMatch => Some(EvaluationReason::TargetingMatch),
+            EvaluatorReason::Disabled => Some(EvaluationReason::Disabled),
+            EvaluatorReason::Error | EvaluatorReason::FlagNotFound | EvaluatorReason::Fallback => {
+                Some(EvaluationReason::Error)
             }
         }
+    }
 
-        if should_clear {
-            debug!("Flag store updated, clearing cache");
-            if let Some(cache) = &self.cache {
-                cache.purge().await;
+    /// Map evaluator error code to OpenFeature error code
+    fn map_error_code(code: &EvaluatorErrorCode) -> EvaluationErrorCode {
+        match code {
+            EvaluatorErrorCode::FlagNotFound => EvaluationErrorCode::FlagNotFound,
+            EvaluatorErrorCode::ParseError => EvaluationErrorCode::ParseError,
+            EvaluatorErrorCode::TypeMismatch => EvaluationErrorCode::TypeMismatch,
+            EvaluatorErrorCode::General => {
+                EvaluationErrorCode::General("Evaluation error".to_string())
             }
         }
+    }
+
+    /// Convert evaluation result to resolution details
+    fn result_to_details<T>(
+        result: &EvaluationResult,
+        value_extractor: impl Fn(&JsonValue) -> Option<T>,
+    ) -> Result<ResolutionDetails<T>, EvaluationError> {
+        // Check for errors
+        if let Some(error_code) = &result.error_code {
+            return Err(EvaluationError::builder()
+                .code(Self::map_error_code(error_code))
+                .message(result.error_message.clone().unwrap_or_default())
+                .build());
+        }
+
+        // Extract value
+        let value = value_extractor(&result.value).ok_or_else(|| {
+            EvaluationError::builder()
+                .code(EvaluationErrorCode::TypeMismatch)
+                .message("Value type mismatch".to_string())
+                .build()
+        })?;
+
+        Ok(ResolutionDetails {
+            value,
+            variant: result.variant.clone(),
+            reason: Self::map_reason(&result.reason),
+            flag_metadata: result.flag_metadata.as_ref().map(|metadata| {
+                let mut flag_metadata = FlagMetadata::default();
+                for (key, value) in metadata {
+                    if let Some(metadata_value) = json_to_metadata_value(value) {
+                        flag_metadata = flag_metadata.with_value(key.clone(), metadata_value);
+                    }
+                }
+                flag_metadata
+            }),
+        })
     }
 
     async fn resolve_value<T>(
         &self,
         flag_key: &str,
         context: &EvaluationContext,
-        value_converter: impl Fn(&serde_json::Value) -> Option<T>,
-        type_name: &str,
-    ) -> Result<ResolutionDetails<T>, EvaluationError> {
-        // Check for flag updates and clear cache if needed
-        self.check_for_updates().await;
-
-        if let Some(cache) = &self.cache
-            && let Some(cached_value) = cache.get(flag_key, context).await
+        evaluator_fn: impl Fn(&JsonValue, &serde_json::Map<String, JsonValue>) -> EvaluationResult,
+        value_extractor: impl Fn(&JsonValue) -> Option<T>,
+        cache_value_fn: impl Fn(T) -> Value,
+    ) -> Result<ResolutionDetails<T>, EvaluationError>
+    where
+        T: Clone,
+    {
+        // Try cache first
+        if let Some(cached_value) = self
+            .get_cached_value(flag_key, context, |v| match v {
+                Value::String(s) => value_extractor(&JsonValue::String(s.clone())),
+                Value::Bool(b) => value_extractor(&JsonValue::Bool(*b)),
+                Value::Int(i) => value_extractor(&JsonValue::Number((*i).into())),
+                Value::Float(f) => {
+                    value_extractor(&JsonValue::Number(serde_json::Number::from_f64(*f).unwrap()))
+                }
+                _ => None,
+            })
+            .await
         {
-            debug!("Cache hit for key: {}", flag_key);
-            let json_value = cached_value.to_serde_json();
-            if let Some(value) = value_converter(&json_value) {
-                return Ok(ResolutionDetails::new(value));
-            }
+            return Ok(ResolutionDetails::new(cached_value));
         }
 
-        let query_result = self.store.get_flag(flag_key).await;
+        // Build context for evaluator
+        let ctx_json = Self::build_context_json(context);
+        let ctx_map = ctx_json.as_object().cloned()
+                    .unwrap_or_default();
 
-        let flag = match query_result.feature_flag {
-            Some(flag) => flag,
-            None => {
-                return Err(EvaluationError::builder()
-                    .code(EvaluationErrorCode::FlagNotFound)
-                    .message(format!("Flag {} not found", flag_key))
-                    .build());
-            }
-        };
+        // Call evaluator
+        let result = evaluator_fn(&ctx_json, &ctx_map);
 
-        if flag.state == "DISABLED" {
-            return Err(EvaluationError::builder()
-                .code(EvaluationErrorCode::FlagNotFound)
-                .message(format!("Flag {} is disabled", flag_key))
-                .build());
-        }
+        // Convert result to details
+        let details = Self::result_to_details(&result, value_extractor)?;
 
-        let variant = if flag.get_targeting() == "{}" {
-            flag.default_variant
-        } else {
-            match self
-                .operator
-                .apply(flag_key, &flag.get_targeting(), context)
-                .map_err(|e| {
-                    EvaluationError::builder()
-                        .code(EvaluationErrorCode::General(e.to_string()))
-                        .message(e.to_string())
-                        .build()
-                })? {
-                Some(variant) => variant,
-                None => flag.default_variant,
-            }
-        };
-
-        let value = flag
-            .variants
-            .get(&variant)
-            .and_then(value_converter)
-            .ok_or_else(|| {
-                EvaluationError::builder()
-                    .code(EvaluationErrorCode::TypeMismatch)
-                    .message(format!(
-                        "Value for flag {} is not a {}",
-                        flag_key, type_name
-                    ))
-                    .build()
-            })?;
-
+        // Cache the result
         if let Some(cache) = &self.cache {
-            let cache_value = flag
-                .variants
-                .get(&variant)
-                .map(|v| Value::String(v.to_string()));
-
-            if let Some(v) = cache_value {
-                let _ = cache.add(flag_key, context, v).await;
-            }
+            cache
+                .add(flag_key, context, cache_value_fn(details.value.clone()))
+                .await;
         }
 
-        Ok(ResolutionDetails {
-            value,
-            variant: Some(variant),
-            reason: Some(open_feature::EvaluationReason::TargetingMatch),
-            flag_metadata: None,
-        })
+        Ok(details)
     }
 }
 
@@ -173,26 +292,27 @@ impl FeatureProvider for FileResolver {
         flag_key: &str,
         context: &EvaluationContext,
     ) -> Result<ResolutionDetails<bool>, EvaluationError> {
-        self.resolve_value(flag_key, context, |v| v.as_bool(), "boolean")
-            .await
-    }
-
-    async fn resolve_int_value(
-        &self,
-        flag_key: &str,
-        context: &EvaluationContext,
-    ) -> Result<ResolutionDetails<i64>, EvaluationError> {
-        self.resolve_value(flag_key, context, |v| v.as_i64(), "integer")
-            .await
-    }
-
-    async fn resolve_float_value(
-        &self,
-        flag_key: &str,
-        context: &EvaluationContext,
-    ) -> Result<ResolutionDetails<f64>, EvaluationError> {
-        self.resolve_value(flag_key, context, |v| v.as_f64(), "float")
-            .await
+        self.resolve_value(
+            flag_key,
+            context,
+            |_, ctx| {
+                let state = flagd_evaluator::storage::get_flag_state();
+                let flag = state
+                    .as_ref()
+                    .and_then(|s| s.flags.get(flag_key))
+                    .cloned()
+                    .unwrap_or_else(|| empty_flag(flag_key));
+                let metadata = state
+                    .as_ref()
+                    .map(|s| &s.flag_set_metadata)
+                    .cloned()
+                    .unwrap_or_default();
+                evaluate_bool_flag(&flag, &JsonValue::Object(ctx.clone()), &metadata)
+            },
+            |v| v.as_bool(),
+            Value::Bool,
+        )
+        .await
     }
 
     async fn resolve_string_value(
@@ -203,8 +323,78 @@ impl FeatureProvider for FileResolver {
         self.resolve_value(
             flag_key,
             context,
+            |_, ctx| {
+                let state = flagd_evaluator::storage::get_flag_state();
+                let flag = state
+                    .as_ref()
+                    .and_then(|s| s.flags.get(flag_key))
+                    .cloned()
+                    .unwrap_or_else(|| empty_flag(flag_key));
+                let metadata = state
+                    .as_ref()
+                    .map(|s| &s.flag_set_metadata)
+                    .cloned()
+                    .unwrap_or_default();
+                evaluate_string_flag(&flag, &JsonValue::Object(ctx.clone()), &metadata)
+            },
             |v| v.as_str().map(String::from),
-            "string",
+            Value::String,
+        )
+        .await
+    }
+
+    async fn resolve_int_value(
+        &self,
+        flag_key: &str,
+        context: &EvaluationContext,
+    ) -> Result<ResolutionDetails<i64>, EvaluationError> {
+        self.resolve_value(
+            flag_key,
+            context,
+            |_, ctx| {
+                let state = flagd_evaluator::storage::get_flag_state();
+                let flag = state
+                    .as_ref()
+                    .and_then(|s| s.flags.get(flag_key))
+                    .cloned()
+                    .unwrap_or_else(|| empty_flag(flag_key));
+                let metadata = state
+                    .as_ref()
+                    .map(|s| &s.flag_set_metadata)
+                    .cloned()
+                    .unwrap_or_default();
+                evaluate_int_flag(&flag, &JsonValue::Object(ctx.clone()), &metadata)
+            },
+            |v| v.as_i64(),
+            Value::Int,
+        )
+        .await
+    }
+
+    async fn resolve_float_value(
+        &self,
+        flag_key: &str,
+        context: &EvaluationContext,
+    ) -> Result<ResolutionDetails<f64>, EvaluationError> {
+        self.resolve_value(
+            flag_key,
+            context,
+            |_, ctx| {
+                let state = flagd_evaluator::storage::get_flag_state();
+                let flag = state
+                    .as_ref()
+                    .and_then(|s| s.flags.get(flag_key))
+                    .cloned()
+                    .unwrap_or_else(|| empty_flag(flag_key));
+                let metadata = state
+                    .as_ref()
+                    .map(|s| &s.flag_set_metadata)
+                    .cloned()
+                    .unwrap_or_default();
+                evaluate_float_flag(&flag, &JsonValue::Object(ctx.clone()), &metadata)
+            },
+            |v| v.as_f64(),
+            Value::Float,
         )
         .await
     }
@@ -217,31 +407,68 @@ impl FeatureProvider for FileResolver {
         self.resolve_value(
             flag_key,
             context,
+            |_, ctx| {
+                let state = flagd_evaluator::storage::get_flag_state();
+                let flag = state
+                    .as_ref()
+                    .and_then(|s| s.flags.get(flag_key))
+                    .cloned()
+                    .unwrap_or_else(|| empty_flag(flag_key));
+                let metadata = state
+                    .as_ref()
+                    .map(|s| &s.flag_set_metadata)
+                    .cloned()
+                    .unwrap_or_default();
+                evaluate_flag(&flag, &JsonValue::Object(ctx.clone()), &metadata)
+            },
             |v| {
                 v.as_object().map(|obj| {
                     let fields = obj
                         .iter()
-                        .map(|(k, v)| {
-                            let value = match v {
-                                serde_json::Value::String(s) => Value::String(s.clone()),
-                                serde_json::Value::Number(n) => {
-                                    if n.is_i64() {
-                                        Value::Int(n.as_i64().unwrap())
-                                    } else {
-                                        Value::Float(n.as_f64().unwrap())
-                                    }
-                                }
-                                serde_json::Value::Bool(b) => Value::Bool(*b),
-                                _ => Value::String(v.to_string()),
-                            };
-                            (k.clone(), value)
-                        })
+                        .map(|(k, v)| (k.clone(), json_to_value(v)))
                         .collect();
                     StructValue { fields }
                 })
             },
-            "struct",
+            |s| Value::Struct(s),
         )
         .await
+    }
+}
+
+/// Convert JsonValue to OpenFeature Value
+fn json_to_value(v: &JsonValue) -> Value {
+    match v {
+        JsonValue::String(s) => Value::String(s.clone()),
+        JsonValue::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                Value::Int(i)
+            } else {
+                Value::Float(n.as_f64().unwrap())
+            }
+        }
+        JsonValue::Bool(b) => Value::Bool(*b),
+        JsonValue::Object(obj) => {
+            let fields = obj.iter().map(|(k, v)| (k.clone(), json_to_value(v))).collect();
+            Value::Struct(StructValue { fields })
+        }
+        JsonValue::Array(arr) => Value::Array(arr.iter().map(json_to_value).collect()),
+        JsonValue::Null => Value::String(String::new()), // Default for null
+    }
+}
+
+/// Convert JsonValue to FlagMetadataValue
+fn json_to_metadata_value(v: &JsonValue) -> Option<FlagMetadataValue> {
+    match v {
+        JsonValue::String(s) => Some(FlagMetadataValue::String(s.clone())),
+        JsonValue::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                Some(FlagMetadataValue::Int(i))
+            } else {
+                n.as_f64().map(FlagMetadataValue::Float)
+            }
+        }
+        JsonValue::Bool(b) => Some(FlagMetadataValue::Bool(*b)),
+        _ => None, // FlagMetadata only supports primitives
     }
 }

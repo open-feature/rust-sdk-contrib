@@ -29,7 +29,7 @@ rpc = ["dep:tonic", "dep:tonic-prost", "dep:prost", "dep:prost-types", "dep:hype
 # REST evaluation mode - uses HTTP/OFREP to connect to flagd service
 rest = ["dep:reqwest"]
 # In-process evaluation mode - local evaluation with gRPC sync or file-based configuration
-in-process = ["dep:tonic", "dep:tonic-prost", "dep:prost", "dep:prost-types", "dep:datalogic-rs", "dep:murmurhash3", "dep:semver"]
+in-process = ["dep:tonic", "dep:tonic-prost", "dep:prost", "dep:prost-types", "dep:flagd-evaluator"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -72,7 +72,5 @@ tower = { version = "0.5", optional = true }
 # REST-specific dependencies
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"], optional = true }
 
-# In-Process-specific dependencies (targeting engine)
-datalogic-rs = { version = "4.0.4", optional = true }
-murmurhash3 = { version = "0.0.5", optional = true }
-semver = { version = "1.0.27", optional = true }
+# In-Process-specific dependencies (evaluation engine)
+flagd-evaluator = { path = "../../../flagd-evaluator", default-features = false, optional = true }
