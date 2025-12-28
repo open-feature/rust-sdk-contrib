@@ -1,38 +1,22 @@
 use crate::resolver::common::upstream::UpstreamConfig;
+use crate::resolver::in_process::resolver::common;
 use crate::{CacheService, FlagdOptions};
 use anyhow::Result;
 use async_trait::async_trait;
 use flagd_evaluator::evaluation::{
     evaluate_bool_flag, evaluate_float_flag, evaluate_flag, evaluate_int_flag,
-    evaluate_string_flag, ErrorCode as EvaluatorErrorCode, EvaluationResult,
-    ResolutionReason as EvaluatorReason,
+    evaluate_string_flag, EvaluationResult,
 };
 use flagd_evaluator::model::ParsingResult;
 use flagd_evaluator::storage::{update_flag_state, ValidationMode};
 use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
-use open_feature::{
-    EvaluationContext, EvaluationError, EvaluationErrorCode, EvaluationReason, FlagMetadata,
-    FlagMetadataValue, StructValue, Value,
-};
+use open_feature::{EvaluationContext, EvaluationError, Value};
 use serde_json::Value as JsonValue;
 use std::sync::Arc;
 use tracing::debug;
 
 use crate::resolver::in_process::storage::connector::grpc::GrpcStreamConnector;
 use crate::resolver::in_process::storage::connector::{Connector, QueuePayloadType};
-use flagd_evaluator::model::FeatureFlag;
-
-/// Helper to create an empty FeatureFlag for a given key when one doesn't exist
-fn empty_flag(key: &str) -> FeatureFlag {
-    FeatureFlag {
-        key: Some(key.to_string()),
-        state: "DISABLED".to_string(),
-        default_variant: None,
-        variants: Default::default(),
-        targeting: None,
-        metadata: Default::default(),
-    }
-}
 
 /// In-process resolver using the native flagd-evaluator
 pub struct InProcessResolver {
@@ -164,117 +148,11 @@ impl InProcessResolver {
         None
     }
 
-    /// Convert EvaluationContextFieldValue to JsonValue recursively
-    fn context_field_to_json(value: &open_feature::EvaluationContextFieldValue) -> JsonValue {
-        use open_feature::EvaluationContextFieldValue;
-        match value {
-            EvaluationContextFieldValue::String(s) => JsonValue::String(s.clone()),
-            EvaluationContextFieldValue::Bool(b) => JsonValue::Bool(*b),
-            EvaluationContextFieldValue::Int(i) => JsonValue::Number((*i).into()),
-            EvaluationContextFieldValue::Float(f) => {
-                JsonValue::Number(serde_json::Number::from_f64(*f).unwrap_or_else(|| {
-                    serde_json::Number::from_f64(0.0).unwrap()
-                }))
-            }
-            EvaluationContextFieldValue::DateTime(dt) => {
-                JsonValue::String(dt.to_string())
-            }
-            EvaluationContextFieldValue::Struct(_) => {
-                // NOTE: The OpenFeature Rust SDK stores structs as Arc<dyn Any> which cannot be
-                // introspected or serialized. This is a known limitation - see the TODO comment in
-                // the SDK source. Until this is fixed, we return an empty object to avoid breaking
-                // targeting rules that expect an object type. This means nested struct fields in
-                // evaluation context cannot be accessed by targeting rules.
-                // See: https://github.com/open-feature/rust-sdk/blob/main/open-feature/src/evaluation/context_field_value.rs
-                JsonValue::Object(serde_json::Map::new())
-            }
-        }
-    }
-
-    /// Build context JSON for evaluator from OpenFeature context
-    fn build_context_json(context: &EvaluationContext) -> JsonValue {
-        let mut root = serde_json::Map::new();
-
-        // Add targeting key if present
-        if let Some(targeting_key) = &context.targeting_key {
-            root.insert("targetingKey".to_string(), JsonValue::String(targeting_key.clone()));
-        }
-
-        // Add custom fields
-        for (key, value) in &context.custom_fields {
-            root.insert(key.clone(), Self::context_field_to_json(value));
-        }
-
-        JsonValue::Object(root)
-    }
-
-    /// Map evaluator reason to OpenFeature reason
-    fn map_reason(reason: &EvaluatorReason) -> Option<EvaluationReason> {
-        match reason {
-            EvaluatorReason::Static => Some(EvaluationReason::Static),
-            EvaluatorReason::Default => Some(EvaluationReason::Default),
-            EvaluatorReason::TargetingMatch => Some(EvaluationReason::TargetingMatch),
-            EvaluatorReason::Disabled => Some(EvaluationReason::Disabled),
-            EvaluatorReason::Error | EvaluatorReason::FlagNotFound | EvaluatorReason::Fallback => {
-                Some(EvaluationReason::Error)
-            }
-        }
-    }
-
-    /// Map evaluator error code to OpenFeature error code
-    fn map_error_code(code: &EvaluatorErrorCode) -> EvaluationErrorCode {
-        match code {
-            EvaluatorErrorCode::FlagNotFound => EvaluationErrorCode::FlagNotFound,
-            EvaluatorErrorCode::ParseError => EvaluationErrorCode::ParseError,
-            EvaluatorErrorCode::TypeMismatch => EvaluationErrorCode::TypeMismatch,
-            EvaluatorErrorCode::General => {
-                EvaluationErrorCode::General("Evaluation error".to_string())
-            }
-        }
-    }
-
-    /// Convert evaluation result to resolution details
-    fn result_to_details<T>(
-        result: &EvaluationResult,
-        value_extractor: impl Fn(&JsonValue) -> Option<T>,
-    ) -> Result<ResolutionDetails<T>, EvaluationError> {
-        // Check for errors
-        if let Some(error_code) = &result.error_code {
-            return Err(EvaluationError::builder()
-                .code(Self::map_error_code(error_code))
-                .message(result.error_message.clone().unwrap_or_default())
-                .build());
-        }
-
-        // Extract value
-        let value = value_extractor(&result.value).ok_or_else(|| {
-            EvaluationError::builder()
-                .code(EvaluationErrorCode::TypeMismatch)
-                .message("Value type mismatch".to_string())
-                .build()
-        })?;
-
-        Ok(ResolutionDetails {
-            value,
-            variant: result.variant.clone(),
-            reason: Self::map_reason(&result.reason),
-            flag_metadata: result.flag_metadata.as_ref().map(|metadata| {
-                let mut flag_metadata = FlagMetadata::default();
-                for (key, value) in metadata {
-                    if let Some(metadata_value) = json_to_metadata_value(value) {
-                        flag_metadata = flag_metadata.with_value(key.clone(), metadata_value);
-                    }
-                }
-                flag_metadata
-            }),
-        })
-    }
-
     async fn resolve_value<T>(
         &self,
         flag_key: &str,
         context: &EvaluationContext,
-        evaluator_fn: impl Fn(&JsonValue, &serde_json::Map<String, JsonValue>) -> EvaluationResult,
+        evaluator_fn: impl Fn(&serde_json::Map<String, JsonValue>) -> EvaluationResult,
         value_extractor: impl Fn(&JsonValue) -> Option<T>,
         cache_value_fn: impl Fn(T) -> Value,
     ) -> Result<ResolutionDetails<T>, EvaluationError>
@@ -298,14 +176,16 @@ impl InProcessResolver {
         }
 
         // Build context for evaluator
-        let ctx_json = Self::build_context_json(context);
-        let ctx_map = ctx_json.as_object().cloned().unwrap_or_default();
+        let ctx_json = common::build_context_json(context);
+        let ctx_map = ctx_json.as_object().unwrap_or_else(|| {
+            panic!("build_context_json should always return an object")
+        });
 
-        // Call evaluator
-        let result = evaluator_fn(&ctx_json, &ctx_map);
+        // Call evaluator (no clone needed)
+        let result = evaluator_fn(ctx_map);
 
         // Convert result to details
-        let details = Self::result_to_details(&result, value_extractor)?;
+        let details = common::result_to_details(&result, value_extractor)?;
 
         // Cache the result
         if let Some(cache) = &self.cache {
@@ -332,18 +212,8 @@ impl FeatureProvider for InProcessResolver {
         self.resolve_value(
             flag_key,
             context,
-            |_, ctx| {
-                let state = flagd_evaluator::storage::get_flag_state();
-                let flag = state
-                    .as_ref()
-                    .and_then(|s| s.flags.get(flag_key))
-                    .cloned()
-                    .unwrap_or_else(|| empty_flag(flag_key));
-                let metadata = state
-                    .as_ref()
-                    .map(|s| &s.flag_set_metadata)
-                    .cloned()
-                    .unwrap_or_default();
+            |ctx| {
+                let (flag, metadata) = common::get_flag_and_metadata(flag_key);
                 evaluate_bool_flag(&flag, &JsonValue::Object(ctx.clone()), &metadata)
             },
             |v| v.as_bool(),
@@ -360,18 +230,8 @@ impl FeatureProvider for InProcessResolver {
         self.resolve_value(
             flag_key,
             context,
-            |_, ctx| {
-                let state = flagd_evaluator::storage::get_flag_state();
-                let flag = state
-                    .as_ref()
-                    .and_then(|s| s.flags.get(flag_key))
-                    .cloned()
-                    .unwrap_or_else(|| empty_flag(flag_key));
-                let metadata = state
-                    .as_ref()
-                    .map(|s| &s.flag_set_metadata)
-                    .cloned()
-                    .unwrap_or_default();
+            |ctx| {
+                let (flag, metadata) = common::get_flag_and_metadata(flag_key);
                 evaluate_string_flag(&flag, &JsonValue::Object(ctx.clone()), &metadata)
             },
             |v| v.as_str().map(String::from),
@@ -388,18 +248,8 @@ impl FeatureProvider for InProcessResolver {
         self.resolve_value(
             flag_key,
             context,
-            |_, ctx| {
-                let state = flagd_evaluator::storage::get_flag_state();
-                let flag = state
-                    .as_ref()
-                    .and_then(|s| s.flags.get(flag_key))
-                    .cloned()
-                    .unwrap_or_else(|| empty_flag(flag_key));
-                let metadata = state
-                    .as_ref()
-                    .map(|s| &s.flag_set_metadata)
-                    .cloned()
-                    .unwrap_or_default();
+            |ctx| {
+                let (flag, metadata) = common::get_flag_and_metadata(flag_key);
                 evaluate_int_flag(&flag, &JsonValue::Object(ctx.clone()), &metadata)
             },
             |v| v.as_i64(),
@@ -416,18 +266,8 @@ impl FeatureProvider for InProcessResolver {
         self.resolve_value(
             flag_key,
             context,
-            |_, ctx| {
-                let state = flagd_evaluator::storage::get_flag_state();
-                let flag = state
-                    .as_ref()
-                    .and_then(|s| s.flags.get(flag_key))
-                    .cloned()
-                    .unwrap_or_else(|| empty_flag(flag_key));
-                let metadata = state
-                    .as_ref()
-                    .map(|s| &s.flag_set_metadata)
-                    .cloned()
-                    .unwrap_or_default();
+            |ctx| {
+                let (flag, metadata) = common::get_flag_and_metadata(flag_key);
                 evaluate_float_flag(&flag, &JsonValue::Object(ctx.clone()), &metadata)
             },
             |v| v.as_f64(),
@@ -440,72 +280,25 @@ impl FeatureProvider for InProcessResolver {
         &self,
         flag_key: &str,
         context: &EvaluationContext,
-    ) -> Result<ResolutionDetails<StructValue>, EvaluationError> {
+    ) -> Result<ResolutionDetails<open_feature::StructValue>, EvaluationError> {
         self.resolve_value(
             flag_key,
             context,
-            |_, ctx| {
-                let state = flagd_evaluator::storage::get_flag_state();
-                let flag = state
-                    .as_ref()
-                    .and_then(|s| s.flags.get(flag_key))
-                    .cloned()
-                    .unwrap_or_else(|| empty_flag(flag_key));
-                let metadata = state
-                    .as_ref()
-                    .map(|s| &s.flag_set_metadata)
-                    .cloned()
-                    .unwrap_or_default();
+            |ctx| {
+                let (flag, metadata) = common::get_flag_and_metadata(flag_key);
                 evaluate_flag(&flag, &JsonValue::Object(ctx.clone()), &metadata)
             },
             |v| {
                 v.as_object().map(|obj| {
                     let fields = obj
                         .iter()
-                        .map(|(k, v)| (k.clone(), json_to_value(v)))
+                        .map(|(k, v)| (k.clone(), common::json_to_value(v)))
                         .collect();
-                    StructValue { fields }
+                    open_feature::StructValue { fields }
                 })
             },
             |s| Value::Struct(s),
         )
         .await
-    }
-}
-
-/// Convert JsonValue to OpenFeature Value
-fn json_to_value(v: &JsonValue) -> Value {
-    match v {
-        JsonValue::String(s) => Value::String(s.clone()),
-        JsonValue::Number(n) => {
-            if let Some(i) = n.as_i64() {
-                Value::Int(i)
-            } else {
-                Value::Float(n.as_f64().unwrap())
-            }
-        }
-        JsonValue::Bool(b) => Value::Bool(*b),
-        JsonValue::Object(obj) => {
-            let fields = obj.iter().map(|(k, v)| (k.clone(), json_to_value(v))).collect();
-            Value::Struct(StructValue { fields })
-        }
-        JsonValue::Array(arr) => Value::Array(arr.iter().map(json_to_value).collect()),
-        JsonValue::Null => Value::String(String::new()), // Default for null
-    }
-}
-
-/// Convert JsonValue to FlagMetadataValue
-fn json_to_metadata_value(v: &JsonValue) -> Option<FlagMetadataValue> {
-    match v {
-        JsonValue::String(s) => Some(FlagMetadataValue::String(s.clone())),
-        JsonValue::Number(n) => {
-            if let Some(i) = n.as_i64() {
-                Some(FlagMetadataValue::Int(i))
-            } else {
-                n.as_f64().map(FlagMetadataValue::Float)
-            }
-        }
-        JsonValue::Bool(b) => Some(FlagMetadataValue::Bool(*b)),
-        _ => None, // FlagMetadata only supports primitives
     }
 }
