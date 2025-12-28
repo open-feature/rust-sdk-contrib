@@ -16,7 +16,6 @@ use open_feature::{
 };
 use serde_json::Value as JsonValue;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tracing::debug;
 
 use crate::resolver::in_process::storage::connector::grpc::GrpcStreamConnector;
@@ -165,6 +164,33 @@ impl InProcessResolver {
         None
     }
 
+    /// Convert EvaluationContextFieldValue to JsonValue recursively
+    fn context_field_to_json(value: &open_feature::EvaluationContextFieldValue) -> JsonValue {
+        use open_feature::EvaluationContextFieldValue;
+        match value {
+            EvaluationContextFieldValue::String(s) => JsonValue::String(s.clone()),
+            EvaluationContextFieldValue::Bool(b) => JsonValue::Bool(*b),
+            EvaluationContextFieldValue::Int(i) => JsonValue::Number((*i).into()),
+            EvaluationContextFieldValue::Float(f) => {
+                JsonValue::Number(serde_json::Number::from_f64(*f).unwrap_or_else(|| {
+                    serde_json::Number::from_f64(0.0).unwrap()
+                }))
+            }
+            EvaluationContextFieldValue::DateTime(dt) => {
+                JsonValue::String(dt.to_string())
+            }
+            EvaluationContextFieldValue::Struct(_) => {
+                // NOTE: The OpenFeature Rust SDK stores structs as Arc<dyn Any> which cannot be
+                // introspected or serialized. This is a known limitation - see the TODO comment in
+                // the SDK source. Until this is fixed, we return an empty object to avoid breaking
+                // targeting rules that expect an object type. This means nested struct fields in
+                // evaluation context cannot be accessed by targeting rules.
+                // See: https://github.com/open-feature/rust-sdk/blob/main/open-feature/src/evaluation/context_field_value.rs
+                JsonValue::Object(serde_json::Map::new())
+            }
+        }
+    }
+
     /// Build context JSON for evaluator from OpenFeature context
     fn build_context_json(context: &EvaluationContext) -> JsonValue {
         let mut root = serde_json::Map::new();
@@ -176,23 +202,7 @@ impl InProcessResolver {
 
         // Add custom fields
         for (key, value) in &context.custom_fields {
-            use open_feature::EvaluationContextFieldValue;
-            let json_value = match value {
-                EvaluationContextFieldValue::String(s) => JsonValue::String(s.clone()),
-                EvaluationContextFieldValue::Bool(b) => JsonValue::Bool(*b),
-                EvaluationContextFieldValue::Int(i) => JsonValue::Number((*i).into()),
-                EvaluationContextFieldValue::Float(f) => {
-                    JsonValue::Number(serde_json::Number::from_f64(*f).unwrap())
-                }
-                EvaluationContextFieldValue::DateTime(dt) => {
-                    JsonValue::String(dt.to_string())
-                }
-                EvaluationContextFieldValue::Struct(_) => {
-                    // For now, convert struct to string
-                    JsonValue::String(format!("{:?}", value))
-                }
-            };
-            root.insert(key.clone(), json_value);
+            root.insert(key.clone(), Self::context_field_to_json(value));
         }
 
         JsonValue::Object(root)
