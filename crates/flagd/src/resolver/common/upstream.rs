@@ -1,5 +1,6 @@
 use crate::error::FlagdError;
 use std::str::FromStr;
+use tonic::transport::ClientTlsConfig;
 use tonic::transport::{Endpoint, Uri};
 use tracing::debug;
 
@@ -19,8 +20,16 @@ impl UpstreamConfig {
 
         if target.starts_with("http://") || target.starts_with("https://") {
             debug!("Target is already an HTTP(S) endpoint");
-            let endpoint = Endpoint::from_shared(target)
+            let mut endpoint = Endpoint::from_shared(target.clone())
                 .map_err(|e| FlagdError::Config(format!("Invalid endpoint: {}", e)))?;
+            
+            // Apply TLS config for https URLs
+            if target.starts_with("https://") {
+                endpoint = endpoint
+                    .tls_config(ClientTlsConfig::new().with_enabled_roots())
+                    .map_err(|e| FlagdError::Config(format!("TLS config error: {}", e)))?;
+            }
+            
             return Ok(Self {
                 endpoint,
                 authority: None, // Standard HTTP(S) doesn't need custom authority
@@ -54,11 +63,18 @@ impl UpstreamConfig {
                 .unwrap_or(if is_in_process { 8015 } else { 8013 });
 
             debug!("Using standard resolution with {}:{}", host, port);
-            (format!("{}://{}:{}", scheme, host, port), None) // Standard resolution doesn't need custom authority
+            (format!("{}://{}:{}", scheme, host, port), None)
         };
 
-        let endpoint = Endpoint::from_shared(endpoint_str)
+        let mut endpoint = Endpoint::from_shared(endpoint_str)
             .map_err(|e| FlagdError::Config(format!("Invalid endpoint: {}", e)))?;
+
+        // Apply TLS config when tls is enabled
+        if tls {
+            endpoint = endpoint
+                .tls_config(ClientTlsConfig::new().with_enabled_roots())
+                .map_err(|e| FlagdError::Config(format!("TLS config error: {}", e)))?;
+        }
 
         Ok(Self {
             endpoint,
