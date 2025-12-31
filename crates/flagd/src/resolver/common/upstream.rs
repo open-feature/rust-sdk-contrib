@@ -22,14 +22,14 @@ impl UpstreamConfig {
             debug!("Target is already an HTTP(S) endpoint");
             let mut endpoint = Endpoint::from_shared(target.clone())
                 .map_err(|e| FlagdError::Config(format!("Invalid endpoint: {}", e)))?;
-            
+
             // Apply TLS config for https URLs
             if target.starts_with("https://") {
                 endpoint = endpoint
                     .tls_config(ClientTlsConfig::new().with_enabled_roots())
                     .map_err(|e| FlagdError::Config(format!("TLS config error: {}", e)))?;
             }
-            
+
             return Ok(Self {
                 endpoint,
                 authority: None, // Standard HTTP(S) doesn't need custom authority
