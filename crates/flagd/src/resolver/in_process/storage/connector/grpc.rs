@@ -31,6 +31,7 @@ pub struct GrpcStreamConnector {
     authority: Option<String>, // optional authority for custom name resolution (e.g. envoy://)
     provider_id: String,       // provider identifier for sync requests
     channel: Arc<Mutex<Option<Channel>>>, // reusable channel for connection pooling
+    tls: bool,                 // whether to use TLS for connections
 }
 
 impl GrpcStreamConnector {
@@ -59,6 +60,7 @@ impl GrpcStreamConnector {
                 .clone()
                 .unwrap_or_else(|| "rust-flagd-provider".to_string()),
             channel: Arc::new(Mutex::new(None)),
+            tls: options.tls,
         }
     }
 
@@ -90,6 +92,7 @@ impl GrpcStreamConnector {
                 .clone()
                 .unwrap_or_else(|| "rust-flagd-provider".to_string()),
             channel: Arc::new(Mutex::new(None)),
+            tls: options.tls,
         }
     }
 
@@ -188,7 +191,7 @@ impl GrpcStreamConnector {
         }
 
         debug!("Creating new channel connection to {}", self.target);
-        let config = UpstreamConfig::new(self.target.clone(), true)?;
+        let config = UpstreamConfig::new(self.target.clone(), true, self.tls)?;
         let channel = self.connect_with_timeout_using(&config).await?;
         *channel_guard = Some(channel.clone());
         Ok(channel)
@@ -335,7 +338,8 @@ mod tests {
         let connector = GrpcStreamConnector::new(target.clone(), None, &options, None);
 
         // Create an upstream configuration with the invalid target.
-        let config = UpstreamConfig::new(target, false).expect("failed to create upstream config");
+        let config =
+            UpstreamConfig::new(target, false, false).expect("failed to create upstream config");
 
         let start = Instant::now();
         let result = connector.connect_with_timeout_using(&config).await;

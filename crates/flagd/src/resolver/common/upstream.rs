@@ -9,16 +9,21 @@ pub struct UpstreamConfig {
 }
 
 impl UpstreamConfig {
-    pub fn new(target: String, is_in_process: bool) -> Result<Self, FlagdError> {
-        debug!("Creating upstream config for target: {}", target);
+    pub fn new(target: String, is_in_process: bool, tls: bool) -> Result<Self, FlagdError> {
+        debug!(
+            "Creating upstream config for target: {}, tls: {}",
+            target, tls
+        );
 
-        if target.starts_with("http://") {
-            debug!("Target is already an HTTP endpoint");
+        let scheme = if tls { "https" } else { "http" };
+
+        if target.starts_with("http://") || target.starts_with("https://") {
+            debug!("Target is already an HTTP(S) endpoint");
             let endpoint = Endpoint::from_shared(target)
                 .map_err(|e| FlagdError::Config(format!("Invalid endpoint: {}", e)))?;
             return Ok(Self {
                 endpoint,
-                authority: None, // Standard HTTP doesn't need custom authority
+                authority: None, // Standard HTTP(S) doesn't need custom authority
             });
         }
 
@@ -37,7 +42,7 @@ impl UpstreamConfig {
             let port = uri.port_u16().unwrap_or(9211); // Use Envoy port directly
 
             (
-                format!("http://{}:{}", host, port),
+                format!("{}://{}:{}", scheme, host, port),
                 Some(authority.to_string()),
             )
         } else {
@@ -49,7 +54,7 @@ impl UpstreamConfig {
                 .unwrap_or(if is_in_process { 8015 } else { 8013 });
 
             debug!("Using standard resolution with {}:{}", host, port);
-            (format!("http://{}:{}", host, port), None) // Standard resolution doesn't need custom authority
+            (format!("{}://{}:{}", scheme, host, port), None) // Standard resolution doesn't need custom authority
         };
 
         let endpoint = Endpoint::from_shared(endpoint_str)
@@ -67,5 +72,89 @@ impl UpstreamConfig {
 
     pub fn authority(&self) -> Option<String> {
         self.authority.clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tls_disabled_uses_http_scheme() {
+        let config = UpstreamConfig::new("localhost:8013".to_string(), false, false).unwrap();
+        assert!(config.endpoint().uri().to_string().starts_with("http://"));
+        assert_eq!(
+            config.endpoint().uri().to_string(),
+            "http://localhost:8013/"
+        );
+    }
+
+    #[test]
+    fn test_tls_enabled_uses_https_scheme() {
+        let config = UpstreamConfig::new("localhost:8013".to_string(), false, true).unwrap();
+        assert!(config.endpoint().uri().to_string().starts_with("https://"));
+        assert_eq!(
+            config.endpoint().uri().to_string(),
+            "https://localhost:8013/"
+        );
+    }
+
+    #[test]
+    fn test_in_process_default_port_with_tls() {
+        let config = UpstreamConfig::new("localhost".to_string(), true, true).unwrap();
+        assert_eq!(
+            config.endpoint().uri().to_string(),
+            "https://localhost:8015/"
+        );
+    }
+
+    #[test]
+    fn test_rpc_default_port_with_tls() {
+        let config = UpstreamConfig::new("localhost".to_string(), false, true).unwrap();
+        assert_eq!(
+            config.endpoint().uri().to_string(),
+            "https://localhost:8013/"
+        );
+    }
+
+    #[test]
+    fn test_explicit_http_url_preserved() {
+        let config =
+            UpstreamConfig::new("http://example.com:9000".to_string(), false, true).unwrap();
+        assert_eq!(
+            config.endpoint().uri().to_string(),
+            "http://example.com:9000/"
+        );
+    }
+
+    #[test]
+    fn test_explicit_https_url_preserved() {
+        let config =
+            UpstreamConfig::new("https://example.com:9000".to_string(), false, false).unwrap();
+        assert_eq!(
+            config.endpoint().uri().to_string(),
+            "https://example.com:9000/"
+        );
+    }
+
+    #[test]
+    fn test_envoy_target_with_tls() {
+        let config =
+            UpstreamConfig::new("envoy://localhost:9211/my-service".to_string(), false, true)
+                .unwrap();
+        assert!(config.endpoint().uri().to_string().starts_with("https://"));
+        assert_eq!(config.authority(), Some("my-service".to_string()));
+    }
+
+    #[test]
+    fn test_envoy_target_without_tls() {
+        let config = UpstreamConfig::new(
+            "envoy://localhost:9211/my-service".to_string(),
+            false,
+            false,
+        )
+        .unwrap();
+        assert!(config.endpoint().uri().to_string().starts_with("http://"));
+        assert_eq!(config.authority(), Some("my-service".to_string()));
     }
 }
