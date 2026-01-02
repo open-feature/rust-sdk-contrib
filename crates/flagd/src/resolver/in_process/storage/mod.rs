@@ -12,8 +12,7 @@ use tokio::sync::RwLock;
 use tokio::sync::mpsc::{Receiver, Sender, channel};
 
 /// State of the flag storage
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum StorageState {
     /// Storage is healthy and up-to-date
     #[default]
@@ -23,7 +22,6 @@ pub enum StorageState {
     /// Storage encountered an error
     Error,
 }
-
 
 /// Represents a change in storage state with affected flags
 #[derive(Debug, Clone, PartialEq)]
