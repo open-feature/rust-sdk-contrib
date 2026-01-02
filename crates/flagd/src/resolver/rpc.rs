@@ -175,7 +175,8 @@ impl RpcResolver {
             .target_uri
             .clone()
             .unwrap_or_else(|| format!("{}:{}", options.host, options.port));
-        let upstream_config = UpstreamConfig::new(target, false, options.tls)?;
+        let upstream_config =
+            UpstreamConfig::new(target, false, options.tls, options.cert_path.as_deref())?;
         let mut endpoint = upstream_config.endpoint().clone();
 
         // Extend support for envoy names resolution

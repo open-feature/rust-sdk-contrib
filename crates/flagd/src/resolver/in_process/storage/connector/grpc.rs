@@ -36,6 +36,7 @@ pub struct GrpcStreamConnector {
     channel: Arc<Mutex<Option<Channel>>>, // reusable channel for connection pooling
     tls: bool,                 // whether to use TLS for connections
     socket_path: Option<String>, // Unix socket path for UDS connections
+    cert_path: Option<String>, // path to custom CA certificate for TLS
 }
 
 impl GrpcStreamConnector {
@@ -66,6 +67,7 @@ impl GrpcStreamConnector {
             channel: Arc::new(Mutex::new(None)),
             tls: options.tls,
             socket_path: None,
+            cert_path: options.cert_path.clone(),
         }
     }
 
@@ -99,6 +101,7 @@ impl GrpcStreamConnector {
             channel: Arc::new(Mutex::new(None)),
             tls: options.tls,
             socket_path: Some(socket_path),
+            cert_path: options.cert_path.clone(),
         }
     }
 
@@ -220,7 +223,12 @@ impl GrpcStreamConnector {
                 })?
         } else {
             // TCP connection using UpstreamConfig
-            let config = UpstreamConfig::new(self.target.clone(), true, self.tls)?;
+            let config = UpstreamConfig::new(
+                self.target.clone(),
+                true,
+                self.tls,
+                self.cert_path.as_deref(),
+            )?;
             self.connect_with_timeout_using(&config).await?
         };
 
@@ -370,8 +378,8 @@ mod tests {
         let connector = GrpcStreamConnector::new(target.clone(), None, &options, None);
 
         // Create an upstream configuration with the invalid target.
-        let config =
-            UpstreamConfig::new(target, false, false).expect("failed to create upstream config");
+        let config = UpstreamConfig::new(target, false, false, None)
+            .expect("failed to create upstream config");
 
         let start = Instant::now();
         let result = connector.connect_with_timeout_using(&config).await;

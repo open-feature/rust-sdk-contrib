@@ -120,7 +120,8 @@ impl InProcessResolver {
             .target_uri
             .clone()
             .unwrap_or_else(|| format!("{}:{}", options.host, options.port));
-        let upstream_config = UpstreamConfig::new(target, true, options.tls)?;
+        let upstream_config =
+            UpstreamConfig::new(target, true, options.tls, options.cert_path.as_deref())?;
         let connector = GrpcStreamConnector::new(
             upstream_config.endpoint().uri().to_string(),
             options.selector.clone(),
