@@ -29,7 +29,7 @@ rpc = ["dep:tonic", "dep:tonic-prost", "dep:prost", "dep:prost-types", "dep:hype
 # REST evaluation mode - uses HTTP/OFREP to connect to flagd service
 rest = ["dep:reqwest"]
 # In-process evaluation mode - local evaluation with gRPC sync or file-based configuration
-in-process = ["dep:tonic", "dep:tonic-prost", "dep:prost", "dep:prost-types", "dep:datalogic-rs", "dep:murmurhash3", "dep:semver", "dep:notify"]
+in-process = ["dep:tonic", "dep:tonic-prost", "dep:prost", "dep:prost-types", "dep:datalogic-rs", "dep:murmurhash3", "dep:semver", "dep:notify", "dep:hyper-util", "dep:tower"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
