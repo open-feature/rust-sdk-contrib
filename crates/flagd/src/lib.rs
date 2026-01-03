@@ -267,9 +267,15 @@ pub struct FlagdOptions {
     pub target_uri: Option<String>,
     /// Type of resolver to use
     pub resolver_type: ResolverType,
-    /// Whether to use TLS
+    /// Whether to use TLS for connections (uses HTTPS/gRPCS)
+    /// When enabled, connections will use TLS with system/webpki root certificates by default.
+    /// For self-signed or custom CA certificates, also set `cert_path`.
     pub tls: bool,
-    /// Path to TLS certificate
+    /// Path to a PEM-encoded CA certificate file for TLS connections.
+    /// Use this to connect to flagd servers using self-signed or custom CA certificates.
+    /// When provided, this certificate is used as the trusted CA instead of system roots.
+    /// Can also be set via the `FLAGD_SERVER_CERT_PATH` environment variable.
+    /// Example: "/path/to/ca-cert.pem"
     pub cert_path: Option<String>,
     /// Request timeout in milliseconds
     pub deadline_ms: u32,
@@ -469,7 +475,7 @@ impl FlagdProvider {
             #[cfg(feature = "rest")]
             ResolverType::Rest => {
                 debug!("Using REST resolver");
-                Arc::new(RestResolver::new(&options))
+                Arc::new(RestResolver::new(&options)?)
             }
             #[cfg(feature = "in-process")]
             ResolverType::InProcess => {

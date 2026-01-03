@@ -33,7 +33,7 @@
 //!         port: 8016,
 //!         ..Default::default()
 //!     };
-//!     let resolver = RestResolver::new(&options);
+//!     let resolver = RestResolver::new(&options).unwrap();
 //!     let context = EvaluationContext::default();
 //!     
 //!     let result = resolver.resolve_bool_value("my-flag", &context).await.unwrap();
@@ -48,12 +48,13 @@ use open_feature::{
     EvaluationContext, EvaluationContextFieldValue, EvaluationError, EvaluationErrorCode,
     EvaluationResult, StructValue, Value,
 };
-use reqwest::Client;
 use reqwest::StatusCode;
+use reqwest::{Client, ClientBuilder};
 use serde_json;
 use tracing::{debug, error, instrument};
 
 use crate::FlagdOptions;
+use crate::error::FlagdError;
 
 /// REST-based resolver implementing the OpenFeature Remote Evaluation Protocol
 #[derive(Debug)]
@@ -67,26 +68,77 @@ pub struct RestResolver {
 }
 
 impl RestResolver {
-    /// Creates a new REST resolver with the specified host and port
+    /// Creates a new REST resolver with the specified options.
     ///
     /// # Arguments
     ///
-    /// * `target` - The host and port of the OFREP service, in the format `host:port`
+    /// * `options` - Configuration options including host, port, TLS settings, and certificate path
     ///
     /// # Returns
     ///
-    /// A new instance of RestResolver configured to connect to the specified endpoint
-    pub fn new(options: &FlagdOptions) -> Self {
+    /// A `Result` containing the new RestResolver instance or an error if client creation fails
+    ///
+    /// # TLS Configuration
+    ///
+    /// - If `options.tls` is true, HTTPS is used
+    /// - If `options.cert_path` is provided, the certificate is loaded and used as the trusted CA
+    /// - This enables connections to servers with self-signed or custom certificates
+    pub fn new(options: &FlagdOptions) -> Result<Self, FlagdError> {
+        let scheme = if options.tls { "https" } else { "http" };
         let endpoint = if let Some(uri) = &options.target_uri {
-            format!("http://{}", uri)
+            // Check if URI already has a scheme
+            if uri.starts_with("http://") || uri.starts_with("https://") {
+                uri.clone()
+            } else {
+                format!("{}://{}", scheme, uri)
+            }
         } else {
-            format!("http://{}:{}", options.host, options.port)
+            format!("{}://{}:{}", scheme, options.host, options.port)
         };
-        Self {
+
+        let client = if endpoint.starts_with("https://") {
+            Self::build_client(options.cert_path.as_deref())?
+        } else {
+            Self::build_client(None)?
+        };
+
+        Ok(Self {
             endpoint,
             metadata: ProviderMetadata::new("flagd-rest-provider"),
-            client: Client::new(),
+            client,
+        })
+    }
+
+    /// Builds an HTTP client, optionally loading a custom CA certificate.
+    ///
+    /// # Arguments
+    /// * `cert_path` - Optional path to a PEM-encoded CA certificate file
+    ///
+    /// # Returns
+    /// A configured `Client` with either custom CA or default roots
+    fn build_client(cert_path: Option<&str>) -> Result<Client, FlagdError> {
+        let mut builder = ClientBuilder::new();
+
+        if let Some(path) = cert_path {
+            debug!(
+                "Loading custom CA certificate for REST client from: {}",
+                path
+            );
+            let cert_pem = std::fs::read(path).map_err(|e| {
+                FlagdError::Config(format!("Failed to read certificate file '{}': {}", path, e))
+            })?;
+            let cert = reqwest::Certificate::from_pem(&cert_pem).map_err(|e| {
+                FlagdError::Config(format!(
+                    "Failed to parse certificate from '{}': {}",
+                    path, e
+                ))
+            })?;
+            builder = builder.add_root_certificate(cert);
         }
+
+        builder
+            .build()
+            .map_err(|e| FlagdError::Config(format!("Failed to build HTTP client: {}", e)))
     }
 }
 
@@ -660,7 +712,7 @@ mod tests {
             target_uri: None,
             ..Default::default()
         };
-        let resolver = RestResolver::new(&options);
+        let resolver = RestResolver::new(&options).expect("Failed to create RestResolver");
         (mock_server, resolver)
     }
 
@@ -1004,5 +1056,59 @@ mod tests {
             result_struct_error.message.unwrap(),
             "Flag: test-flag not found"
         );
+    }
+
+    #[test]
+    fn test_rest_resolver_cert_path_file_not_found() {
+        let options = FlagdOptions {
+            host: "localhost".to_string(),
+            port: 8016,
+            tls: true,
+            cert_path: Some("/nonexistent/path/to/cert.pem".to_string()),
+            ..Default::default()
+        };
+        let result = RestResolver::new(&options);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("Failed to read certificate file"));
+    }
+
+    #[test]
+    fn test_rest_resolver_tls_endpoint() {
+        let options = FlagdOptions {
+            host: "localhost".to_string(),
+            port: 8016,
+            tls: true,
+            cert_path: None,
+            ..Default::default()
+        };
+        let resolver = RestResolver::new(&options).unwrap();
+        assert!(resolver.endpoint.starts_with("https://"));
+    }
+
+    #[test]
+    fn test_rest_resolver_http_endpoint() {
+        let options = FlagdOptions {
+            host: "localhost".to_string(),
+            port: 8016,
+            tls: false,
+            cert_path: None,
+            ..Default::default()
+        };
+        let resolver = RestResolver::new(&options).unwrap();
+        assert!(resolver.endpoint.starts_with("http://"));
+    }
+
+    #[test]
+    fn test_rest_resolver_http_ignores_cert_path() {
+        let options = FlagdOptions {
+            host: "localhost".to_string(),
+            port: 8016,
+            tls: false,
+            cert_path: Some("/nonexistent/path/to/cert.pem".to_string()),
+            ..Default::default()
+        };
+        let resolver = RestResolver::new(&options).unwrap();
+        assert!(resolver.endpoint.starts_with("http://"));
     }
 }
