@@ -11,9 +11,14 @@ on:
       - 'crates/flagd/**'
       - 'crates/ofrep/**'
       - '.github/workflows/flagd-ofrep-check.yml'
+  pull_request:
+    types:
+      - opened
+      - synchronize
 
 jobs:
-  check:
+  flagd-checks:
+    if: github.event_name != 'pull_request' || !startsWith(github.event.pull_request.title, 'chore(main): release')
     runs-on: ubuntu-latest
 
     steps:
@@ -44,17 +49,27 @@ jobs:
         run: |
           cargo readme --no-title --no-license > README.md.generated
           diff README.md README.md.generated
-          
+
       - name: Install and run cargo-audit
         run: |
           cargo install cargo-audit --locked
           # Run from root directory where Cargo.lock is located
           cargo audit
 
+  release-semver-checks:
+    if: github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'chore(main): release')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust
+        run: rustup update --no-self-update stable && rustup default stable
+
       - name: Install cargo-semver-checks
         run: cargo install cargo-semver-checks
 
       - name: Check semver for flagd and ofrep
         run: |
-          cargo semver-checks check-release --package open-feature-flagd --package open-feature-ofrep
-
+          cargo semver-checks check-release --package open-feature-flagd
+          cargo semver-checks check-release --package open-feature-ofrep
