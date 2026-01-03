@@ -52,6 +52,3 @@ jobs:
 
       - name: Check code quality
         run: cargo clippy -- -D warnings
-
-      - name: Check semver
-        uses: obi1kenobi/cargo-semver-checks-action@v2

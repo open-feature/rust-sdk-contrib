@@ -51,3 +51,10 @@ jobs:
           # Run from root directory where Cargo.lock is located
           cargo audit
 
+      - name: Install cargo-semver-checks
+        run: cargo install cargo-semver-checks
+
+      - name: Check semver for flagd and ofrep
+        run: |
+          cargo semver-checks check-release --package open-feature-flagd --package open-feature-ofrep
+
