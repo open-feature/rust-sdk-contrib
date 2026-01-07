@@ -17,7 +17,7 @@ serial_test = "3.2.0"
 [dependencies]
 async-trait = "0.1.89"
 open-feature = "0.2.7"
-reqwest = { version = "0.12", default-features = false, features = [
+reqwest = { version = "0.13", default-features = false, features = [
   "json",
   "stream",
   "rustls-tls",
