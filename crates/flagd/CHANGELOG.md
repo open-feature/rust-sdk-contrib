@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.0](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagd-v0.1.0...open-feature-flagd-v0.2.0) (2026-01-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* flagd, wire up TLS support for gRPC connections ([#95](https://github.com/open-feature/rust-sdk-contrib/issues/95))
+
+### 🐛 Bug Fixes
+
+* flagd, wire up TLS support for gRPC connections ([#95](https://github.com/open-feature/rust-sdk-contrib/issues/95)) ([38bf6d0](https://github.com/open-feature/rust-sdk-contrib/commit/38bf6d0ab0028446df6f808496045f25191ed086))
+
 ## [0.1.0](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagd-v0.0.8...open-feature-flagd-v0.1.0) (2025-12-23)
 
 
