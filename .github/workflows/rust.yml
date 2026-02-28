@@ -35,8 +35,12 @@ jobs:
     - name: Setup cache
       uses: Swatinem/rust-cache@v2
 
-    - name: Run all workspace tests
-      run:  cargo test --workspace --verbose
+    - name: Run main workspace tests
+      run: cargo test --workspace --verbose
+
+    - name: Run flagd-workspace tests
+      run: cargo test --workspace --verbose
+      working-directory: crates/flagd-workspace
 
   lint:
     runs-on: ubuntu-latest
@@ -47,8 +51,16 @@ jobs:
       - name: Check formats
         run: cargo fmt --check
 
+      - name: Check flagd-workspace formats
+        run: cargo fmt --check
+        working-directory: crates/flagd-workspace
+
       - name: Setup cache
         uses: Swatinem/rust-cache@v2
 
       - name: Check code quality
         run: cargo clippy -- -D warnings
+
+      - name: Check flagd-workspace code quality
+        run: cargo clippy -- -D warnings
+        working-directory: crates/flagd-workspace
