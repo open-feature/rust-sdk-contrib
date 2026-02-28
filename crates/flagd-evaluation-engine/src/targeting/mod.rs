@@ -1,4 +1,4 @@
-use crate::error::FlagdError;
+use crate::error::FlagdEvaluationError;
 use datalogic_rs::DataLogic;
 use open_feature::{EvaluationContext, EvaluationContextFieldValue};
 use serde_json::Value;
@@ -44,13 +44,13 @@ impl Operator {
         flag_key: &str,
         targeting_rule: &str,
         ctx: &EvaluationContext,
-    ) -> Result<Option<String>, FlagdError> {
+    ) -> Result<Option<String>, FlagdEvaluationError> {
         // Parse the rule from JSON string
         let rule_value: Value = serde_json::from_str(targeting_rule)?;
 
         // Compile the logic
         let compiled = self.logic.compile(&rule_value).map_err(|e| {
-            FlagdError::Provider(format!("Failed to compile targeting rule: {:?}", e))
+            FlagdEvaluationError::Provider(format!("Failed to compile targeting rule: {:?}", e))
         })?;
 
         // Build context data as serde_json::Value

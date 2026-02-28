@@ -11,8 +11,8 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::debug;
 
-use crate::resolver::in_process::storage::connector::grpc::GrpcStreamConnector;
-use crate::resolver::in_process::storage::{FlagStore, StorageState, StorageStateChange};
+use crate::resolver::in_process::storage::GrpcStreamConnector;
+use crate::resolver::in_process::{FlagStore, StorageState, StorageStateChange};
 
 pub struct InProcessResolver {
     store: Arc<FlagStore>,
@@ -81,7 +81,7 @@ impl InProcessResolver {
     ) -> Result<
         (
             Arc<FlagStore>,
-            tokio::sync::mpsc::Receiver<crate::resolver::in_process::storage::StorageStateChange>,
+            tokio::sync::mpsc::Receiver<crate::resolver::in_process::StorageStateChange>,
         ),
         FlagdError,
     > {
@@ -112,7 +112,7 @@ impl InProcessResolver {
     ) -> Result<
         (
             Arc<FlagStore>,
-            tokio::sync::mpsc::Receiver<crate::resolver::in_process::storage::StorageStateChange>,
+            tokio::sync::mpsc::Receiver<crate::resolver::in_process::StorageStateChange>,
         ),
         FlagdError,
     > {
