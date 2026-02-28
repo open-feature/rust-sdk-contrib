@@ -1,10 +1,10 @@
 use crate::error::FlagdError;
-use crate::resolver::in_process::model::value_converter::ValueConverter;
-use crate::resolver::in_process::storage::connector::file::FileConnector;
-use crate::resolver::in_process::storage::{FlagStore, StorageState, StorageStateChange};
+use crate::resolver::in_process::storage::FileConnector;
 use crate::resolver::in_process::targeting::Operator;
+use crate::resolver::in_process::{FlagStore, StorageState, StorageStateChange};
 use crate::{CacheService, CacheSettings};
 use async_trait::async_trait;
+use flagd_evaluation_engine::model::value_converter::ValueConverter;
 use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
 use open_feature::{EvaluationContext, EvaluationError, EvaluationErrorCode, StructValue, Value};
 use std::sync::Arc;
