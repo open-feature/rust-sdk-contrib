@@ -227,7 +227,12 @@ use open_feature::EvaluationContextFieldValue;
 use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
 use open_feature::{EvaluationContext, EvaluationError, StructValue, Value};
 #[cfg(feature = "rest")]
-use resolver::rest::RestResolver;
+use open_feature_ofrep::{OfrepOptions, OfrepProvider};
+#[cfg(feature = "rest")]
+use std::time::Duration;
+
+#[cfg(feature = "rest")]
+use reqwest::header::HeaderMap;
 use tracing::debug;
 use tracing::instrument;
 
@@ -474,8 +479,26 @@ impl FlagdProvider {
             }
             #[cfg(feature = "rest")]
             ResolverType::Rest => {
-                debug!("Using REST resolver");
-                Arc::new(RestResolver::new(&options)?)
+                debug!("Using REST resolver (OFREP)");
+                // Convert FlagdOptions to OfrepOptions
+                let scheme = if options.tls { "https" } else { "http" };
+                let base_url = if let Some(uri) = &options.target_uri {
+                    if uri.starts_with("http://") || uri.starts_with("https://") {
+                        uri.clone()
+                    } else {
+                        format!("{}://{}", scheme, uri)
+                    }
+                } else {
+                    format!("{}://{}:{}", scheme, options.host, options.port)
+                };
+
+                let ofrep_options = OfrepOptions {
+                    base_url,
+                    headers: HeaderMap::new(),
+                    connect_timeout: Duration::from_millis(options.deadline_ms as u64),
+                    cert_path: options.cert_path,
+                };
+                Arc::new(OfrepProvider::new(ofrep_options).await?)
             }
             #[cfg(feature = "in-process")]
             ResolverType::InProcess => {

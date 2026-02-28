@@ -14,5 +14,4 @@ members = [
     "crates/env-var",
     "crates/flagsmith",
     "crates/flipt",
-    "crates/ofrep"
 ]

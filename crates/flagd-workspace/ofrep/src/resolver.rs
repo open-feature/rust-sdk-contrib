@@ -26,15 +26,48 @@ pub struct Resolver {
 
 impl Resolver {
     pub fn new(options: &OfrepOptions) -> Self {
+        let client = Self::build_client(options).expect("Failed to build HTTP client");
+
         Self {
             base_url: options.base_url.clone(),
             metadata: ProviderMetadata::new("ofrep"),
-            client: Client::builder()
-                .default_headers(options.headers.clone())
-                .connect_timeout(options.connect_timeout)
-                .build()
-                .expect("Failed to build HTTP client"),
+            client,
         }
+    }
+
+    fn build_client(options: &OfrepOptions) -> Result<Client, crate::error::OfrepError> {
+        let mut builder = Client::builder()
+            .default_headers(options.headers.clone())
+            .connect_timeout(options.connect_timeout);
+
+        // Check if we need TLS (https URL or cert_path provided)
+        let needs_tls = options.base_url.starts_with("https://")
+            || options.cert_path.as_ref().is_some_and(|p| !p.is_empty());
+
+        if needs_tls {
+            if let Some(cert_path) = &options.cert_path {
+                if !cert_path.is_empty() {
+                    debug!("Loading custom CA certificate from: {}", cert_path);
+                    let cert_pem = std::fs::read(cert_path).map_err(|e| {
+                        crate::error::OfrepError::Config(format!(
+                            "Failed to read certificate file '{}': {}",
+                            cert_path, e
+                        ))
+                    })?;
+                    let cert = reqwest::Certificate::from_pem(&cert_pem).map_err(|e| {
+                        crate::error::OfrepError::Config(format!(
+                            "Failed to parse certificate from '{}': {}",
+                            cert_path, e
+                        ))
+                    })?;
+                    builder = builder.add_root_certificate(cert);
+                }
+            }
+        }
+
+        builder.build().map_err(|e| {
+            crate::error::OfrepError::Config(format!("Failed to build HTTP client: {}", e))
+        })
     }
 
     async fn parse_retry_after(retry_after: &str) -> DateTime<Utc> {

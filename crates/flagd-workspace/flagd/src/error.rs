@@ -63,6 +63,16 @@ impl From<flagd_evaluation_engine::error::FlagdEvaluationError> for FlagdError {
     }
 }
 
+impl From<open_feature_ofrep::OfrepError> for FlagdError {
+    fn from(error: open_feature_ofrep::OfrepError) -> Self {
+        match error {
+            open_feature_ofrep::OfrepError::Provider(s) => FlagdError::Provider(s),
+            open_feature_ofrep::OfrepError::Connection(s) => FlagdError::Connection(s),
+            open_feature_ofrep::OfrepError::Config(s) => FlagdError::Config(s),
+        }
+    }
+}
+
 impl From<FlagdError> for flagd_evaluation_engine::error::FlagdEvaluationError {
     fn from(error: FlagdError) -> Self {
         match error {

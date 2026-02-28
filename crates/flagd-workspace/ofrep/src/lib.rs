@@ -57,7 +57,7 @@
 mod error;
 mod resolver;
 
-use error::OfrepError;
+pub use error::OfrepError;
 use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
 use open_feature::{EvaluationContext, EvaluationError, StructValue};
 use reqwest::header::HeaderMap;
@@ -79,6 +79,9 @@ pub struct OfrepOptions {
     pub base_url: String,
     pub headers: HeaderMap,
     pub connect_timeout: Duration,
+    /// Path to a PEM-encoded CA certificate file for TLS connections.
+    /// If provided along with https scheme, the certificate is loaded and used as the trusted CA.
+    pub cert_path: Option<String>,
 }
 
 impl Default for OfrepOptions {
@@ -87,6 +90,7 @@ impl Default for OfrepOptions {
             base_url: DEFAULT_BASE_URL.to_string(),
             headers: HeaderMap::new(),
             connect_timeout: DEFAULT_CONNECT_TIMEOUT,
+            cert_path: None,
         }
     }
 }
