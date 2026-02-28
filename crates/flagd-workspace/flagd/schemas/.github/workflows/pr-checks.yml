@@ -1,0 +1,80 @@
+name: "PR checks"
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: 1.22
+
+jobs:
+  lint-protos:
+    runs-on: ubuntu-latest
+    steps:
+      # Install the `buf` CLI
+      - uses: bufbuild/buf-setup-action@v1
+        with:
+          github_token: ${{ github.token }}
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      # Lint your Protobuf sources
+      - uses: bufbuild/buf-lint-action@v1
+        with:
+          input: protobuf
+
+  buf-format:
+    runs-on: ubuntu-latest
+    steps:
+      # Install the `buf` CLI
+      - uses: bufbuild/buf-setup-action@v1
+        with:
+          github_token: ${{ github.token }}
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Buf format check
+        run: buf format -d --exit-code
+
+  buf-breaking-changes:
+    runs-on: ubuntu-latest
+    steps:
+      # Install the `buf` CLI
+      - uses: bufbuild/buf-setup-action@v1
+        with:
+          github_token: ${{ github.token }}
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      # Run breaking change detection against the last commit
+      - uses: bufbuild/buf-breaking-action@v1
+        with:
+          input: protobuf
+          against: 'https://github.com/open-feature/schemas.git#branch=main,ref=HEAD~1,subdir=protobuf'
+
+  
+  validate-schema:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      # Use ajv to validate schema
+      - name: Setup node
+        uses: actions/setup-node@v4.0.1
+
+      - name: Validate schema 
+        run: make ajv-validate-flagd-schema
+
+      # Run go test suite to validate the json schema against positive and/or negative validations in /json/test
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Validate Schema
+        run: make test
+
+      # Ensure there is no diff when make gen-schema-json is run 
+      - run: make gen-schema-json
+      - name: Check no diff 
+        run: |
+          if [ ! -z "$(git status --porcelain)" ]; then echo "JSON schema generation produced diff. Run 'make gen-schema-json' and commit results."; exit 1; fi
+          

@@ -1,0 +1,52 @@
+{
+  "flags": {
+    "some-email-targeted-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "hi": "hi",
+        "bye": "bye",
+        "none": "none"
+      },
+      "defaultVariant": "none",
+      "targeting": {
+        "if": [
+          {
+            "$ref": "is_ballmer"
+          },
+          "hi",
+          "bye"
+        ]
+      }
+    },
+    "some-other-email-targeted-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "yes": "yes",
+        "no": "no",
+        "none": "none"
+      },
+      "defaultVariant": "none",
+      "targeting": {
+        "if": [
+          {
+            "$ref": "is_ballmer"
+          },
+          "yes",
+          "no"
+        ]
+      }
+    }
+  },
+  "$evaluators": {
+    "is_ballmer": {
+      "==": [
+        "ballmer@macrosoft.com",
+        {
+          "var": [
+            "email"
+          ]
+        }
+      ]
+    }
+  }
+}

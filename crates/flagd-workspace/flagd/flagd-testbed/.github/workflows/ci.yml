@@ -1,0 +1,41 @@
+name: ci
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "~1.21"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - run: npm ci
+
+      - name: Lint Gherkin
+        run: npm run gherkin-lint
+
+      - name: Build flagd-testbed Docker image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6
+        with:
+          context: .
+          file: flagd/Dockerfile
+          target: testbed
+          push: false
+
+

@@ -1,0 +1,30 @@
+[package]
+name = "flagd-evaluation-engine"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88" # MSRV
+description = "Evaluation engine for flagd - JSONLogic-based targeting rules"
+documentation = "https://docs.rs/flagd-evaluation-engine"
+readme = "README.md"
+homepage = "https://openfeature.dev/"
+repository = "https://github.com/open-feature/rust-sdk-contrib"
+license = "Apache-2.0"
+
+[dependencies]
+# Core evaluation dependencies
+datalogic-rs = { workspace = true }
+murmurhash3 = { workspace = true }
+semver = { workspace = true }
+
+# JSON and serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# OpenFeature SDK (for EvaluationContext types)
+open-feature = { workspace = true }

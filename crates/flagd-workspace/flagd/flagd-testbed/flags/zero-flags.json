@@ -1,0 +1,100 @@
+{
+  "flags": {
+    "boolean-zero-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "zero": false,
+        "non-zero": true
+      },
+      "defaultVariant": "zero"
+    },
+    "string-zero-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "zero": "",
+        "non-zero": "str"
+      },
+      "defaultVariant": "zero"
+    },
+    "integer-zero-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "zero": 0,
+        "non-zero": 1
+      },
+      "defaultVariant": "zero"
+    },
+    "float-zero-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "zero": 0.0,
+        "non-zero": 1.0
+      },
+      "defaultVariant": "zero"
+    },
+    "boolean-targeted-zero-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "zero": false,
+        "non-zero": true
+      },
+      "targeting": {
+        "if": [
+          {
+            "$ref": "is_ballmer"
+          },
+          "zero"
+        ]
+      },
+      "defaultVariant": "zero"
+    },
+    "string-targeted-zero-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "zero": "",
+        "non-zero": "str"
+      },
+      "targeting": {
+        "if": [
+          {
+            "$ref": "is_ballmer"
+          },
+          "zero"
+        ]
+      },
+      "defaultVariant": "zero"
+    },
+    "integer-targeted-zero-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "zero": 0,
+        "non-zero": 1
+      },
+      "targeting": {
+        "if": [
+          {
+            "$ref": "is_ballmer"
+          },
+          "zero"
+        ]
+      },
+      "defaultVariant": "zero"
+    },
+    "float-targeted-zero-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "zero": 0.0,
+        "non-zero": 1.0
+      },
+      "targeting": {
+        "if": [
+          {
+            "$ref": "is_ballmer"
+          },
+          "zero"
+        ]
+      },
+      "defaultVariant": "zero"
+    }
+  }
+}

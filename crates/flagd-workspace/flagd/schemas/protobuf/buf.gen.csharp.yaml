@@ -1,0 +1,8 @@
+version: v1
+managed:
+  enabled: true
+plugins:
+  - plugin: buf.build/protocolbuffers/csharp:v23.4
+    out: ../proto/csharp
+  - plugin: buf.build/grpc/csharp:v1.56.0
+    out: ../proto/csharp

@@ -1,0 +1,17 @@
+{
+  "server-cert-path": "/ssl/server-cert.pem",
+  "server-key-path": "/ssl/server-key.pem",
+  "sources": [
+    {
+      "uri": "flags/allFlags.json",
+      "provider": "file"
+    },
+    {
+      "uri": "rawflags/selector-flags.json",
+      "provider": "file"
+    }
+  ],
+  "context-value": {
+    "injectedmetadata": "set"
+  }
+}

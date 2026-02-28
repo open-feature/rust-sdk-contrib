@@ -1,0 +1,38 @@
+{
+  "flags": {
+    "combined-metadata-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "true": true,
+        "false": false
+      },
+      "defaultVariant": "false",
+      "targeting": {},
+      "metadata": {
+        "string": "a",
+        "integer": 1,
+        "float": 1.2,
+        "boolean": true
+      }
+    },
+    "only-set-metadata-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "true": true,
+        "false": false
+      },
+      "defaultVariant": "false",
+      "targeting": {}
+    }
+  },
+  "metadata": {
+    "string": "b",
+    "integer": 2,
+    "float": 2.2,
+    "boolean": false,
+    "flag-set-string": "c",
+    "flag-set-integer": 3,
+    "flag-set-float": 3.2,
+    "flag-set-boolean": false
+  }
+}

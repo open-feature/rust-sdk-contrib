@@ -1,0 +1,8 @@
+{
+  "scripts": {
+    "gherkin-lint": "gherkin-lint --rulesdir '/features'"
+  },
+  "devDependencies": {
+    "gherkin-lint": "^4.2.2"
+  }
+}

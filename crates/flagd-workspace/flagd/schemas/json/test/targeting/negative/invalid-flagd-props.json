@@ -1,0 +1,9 @@
+{
+  "if": [
+    {
+      "==": [{ "var": "$flagd.invalidProp" }, { "var": "someprop" }]
+    },
+    "yes",
+    "no"
+  ]
+}

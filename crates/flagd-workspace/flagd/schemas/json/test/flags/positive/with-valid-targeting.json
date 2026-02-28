@@ -1,0 +1,26 @@
+{
+  "$schema": "../../../flags.json",
+  "flags": {
+    "targetedFlag": {
+      "state": "ENABLED",
+      "variants": {
+        "on": true,
+        "off": false
+      },
+      "defaultVariant": "on",
+      "targeting": {
+        "if": [
+          {
+            "ends_with": [
+              {
+                "var": "email"
+              },
+              "@company.com"
+            ]
+          },
+          "on"
+        ]
+      }
+    }
+  }
+}

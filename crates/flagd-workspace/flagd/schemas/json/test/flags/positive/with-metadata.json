@@ -1,0 +1,29 @@
+{
+  "$schema": "../../../flags.json",
+  "flags": {
+    "headerColor": {
+      "variants": {
+        "red": "#FF0000",
+        "blue": "#0000FF",
+        "green": "#00FF00",
+        "yellow": "#FFFF00"
+      },
+      "defaultVariant": "red",
+      "state": "ENABLED",
+      "metadata": {
+        "boolean": true,
+        "string": "string",
+        "float": 1.23,
+        "int": 1
+      }
+    }
+  },
+  "metadata": {
+    "flagSetId": "sso/dev",
+    "version": "1.0.0",
+    "boolean": true,
+    "string": "string",
+    "float": 1.23,
+    "int": 1
+  }
+}

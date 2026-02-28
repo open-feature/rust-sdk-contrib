@@ -1,0 +1,8 @@
+{
+  "sources": [
+    {
+      "uri": "rawflags/selector-flag-combined-metadata.json",
+      "provider": "file"
+    }
+  ]
+}

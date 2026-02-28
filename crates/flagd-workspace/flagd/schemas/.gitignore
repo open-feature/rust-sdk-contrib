@@ -1,0 +1,16 @@
+dist
+
+# Docker run action artifact
+semicolon_delimited_script
+
+# buf generated files
+gen/
+proto/
+
+# Allow use `vendor` for GOPATH
+/vendor
+
+# IDE
+.idea
+
+node_modules

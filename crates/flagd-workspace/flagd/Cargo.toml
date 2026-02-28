@@ -1,0 +1,80 @@
+[package]
+name = "open-feature-flagd"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88" # MSRV
+description = "The official flagd provider for OpenFeature."
+documentation = "https://docs.rs/open-feature-flagd"
+readme = "README.md"
+homepage = "https://openfeature.dev/"
+repository = "https://github.com/open-feature/rust-sdk-contrib"
+license = "Apache-2.0"
+
+[package.metadata.cargo-shear]
+# Used by generated protobuf code (build.rs)
+ignored = ["prost", "tonic-prost"]
+
+# This is needed to reduce package size
+include = [
+    "schemas/protobuf/flagd/evaluation/v1/evaluation.proto",
+    "schemas/protobuf/flagd/sync/v1/sync.proto",
+    "build.rs",
+    "src/*",
+]
+
+[features]
+default = ["rpc", "rest", "in-process"]
+# RPC evaluation mode - uses gRPC to connect to flagd service
+rpc = ["dep:tonic", "dep:tonic-prost", "dep:prost", "dep:prost-types", "dep:hyper-util", "dep:tower"]
+# REST evaluation mode - uses HTTP/OFREP to connect to flagd service
+rest = ["dep:reqwest"]
+# In-process evaluation mode - local evaluation with gRPC sync or file-based configuration
+in-process = ["dep:flagd-evaluation-engine", "dep:tonic", "dep:tonic-prost", "dep:prost", "dep:prost-types", "dep:datalogic-rs", "dep:murmurhash3", "dep:semver", "dep:notify", "dep:hyper-util", "dep:tower"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[build-dependencies]
+tonic-prost-build = { workspace = true }
+
+[dev-dependencies]
+cucumber = "0.22"
+futures-core = "0.3"
+testcontainers = { version = "0.26.3", features = ["http_wait", "blocking"] }
+wiremock = "0.6.5"
+tempfile = "3.24.0"
+serial_test = "3.2"
+test-log = { version = "0.2", features = ["trace"] }
+
+
+[dependencies]
+open-feature = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true }
+lru = "0.16"
+tokio-stream = "0.1"
+tracing = { workspace = true }
+thiserror = { workspace = true }
+
+# RPC and In-Process shared dependencies (gRPC)
+tonic = { workspace = true, optional = true }
+tonic-prost = { workspace = true, optional = true }
+prost = { workspace = true, optional = true }
+prost-types = { workspace = true, optional = true }
+
+# RPC-specific dependencies
+hyper-util = { workspace = true, optional = true }
+tower = { workspace = true, optional = true }
+
+# REST-specific dependencies
+reqwest = { workspace = true, optional = true }
+
+# In-Process-specific dependencies (targeting engine)
+datalogic-rs = { workspace = true, optional = true }
+murmurhash3 = { workspace = true, optional = true }
+semver = { workspace = true, optional = true }
+notify = { workspace = true, optional = true }
+
+# Evaluation engine (extracted to separate crate)
+flagd-evaluation-engine = { path = "../flagd-evaluation-engine", optional = true }

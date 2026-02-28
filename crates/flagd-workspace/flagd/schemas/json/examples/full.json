@@ -1,0 +1,279 @@
+{
+  "$schema": "../flags.json",
+  "flags": {
+    "myBoolFlag": {
+      "state": "ENABLED",
+      "variants": {
+        "on": true,
+        "off": false
+      },
+      "defaultVariant": "on"
+    },
+    "myStringFlag": {
+      "state": "ENABLED",
+      "variants": {
+        "key1": "val1",
+        "key2": "val2"
+      },
+      "defaultVariant": "key1"
+    },
+    "myNumberFlag": {
+      "state": "ENABLED",
+      "variants": {
+        "one": 1,
+        "two": 2
+      },
+      "defaultVariant": "two"
+    },
+    "myObjectFlag": {
+      "state": "ENABLED",
+      "variants": {
+        "object1": {
+          "key": "val"
+        },
+        "object2": {
+          "key": true
+        }
+      },
+      "defaultVariant": "object1"
+    },
+    "fractional-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "clubs": "clubs",
+        "diamonds": "diamonds",
+        "hearts": "hearts",
+        "spades": "spades",
+        "wild": "wild"
+      },
+      "defaultVariant": "wild",
+      "targeting": {
+        "fractional": [
+          { "var": "user.name" },
+          ["clubs", 25],
+          ["diamonds", 25],
+          ["hearts", 25],
+          ["spades", 25]
+        ]
+      }
+    },
+    "shorthand-fractional-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "clubs": "clubs",
+        "diamonds": "diamonds",
+        "hearts": "hearts",
+        "spades": "spades",
+        "wild": "wild"
+      },
+      "defaultVariant": "wild",
+      "targeting": {
+        "fractional": [
+          ["clubs", 25],
+          ["diamonds", 25],
+          ["hearts", 25],
+          ["spades", 25]
+        ]
+      }
+    },
+    "starts-ends-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "prefix": "prefix",
+        "postfix": "postfix",
+        "none": "none"
+      },
+      "defaultVariant": "none",
+      "targeting": {
+        "if": [
+          {
+            "starts_with": [{ "var": "id" }, "abc"]
+          },
+          "prefix",
+          {
+            "if": [
+              {
+                "ends_with": [{ "var": "id" }, "xyz"]
+              },
+              "postfix",
+              {
+                "if": [
+                  {
+                    "ends_with": [{ "var": "id" }, 3]
+                  },
+                  "fail",
+                  "none"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "equal-greater-lesser-version-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "equal": "equal",
+        "greater": "greater",
+        "lesser": "lesser",
+        "none": "none"
+      },
+      "defaultVariant": "none",
+      "targeting": {
+        "if": [
+          {
+            "sem_ver": [{ "var": "version" }, "=", "2.0.0"]
+          },
+          "equal",
+          {
+            "if": [
+              {
+                "sem_ver": [{ "var": "version" }, ">", "2.0.0"]
+              },
+              "greater",
+              {
+                "if": [
+                  {
+                    "sem_ver": [{ "var": "version" }, "<", "2.0.0"]
+                  },
+                  "lesser",
+                  {
+                    "if": [
+                      {
+                        "sem_ver": [{ "var": "version" }, "=", "2.0.0.0"]
+                      },
+                      "fail",
+                      null
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "major-minor-version-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "minor": "minor",
+        "major": "major",
+        "none": "none"
+      },
+      "defaultVariant": "none",
+      "targeting": {
+        "if": [
+          {
+            "sem_ver": [{ "var": "version" }, "~", "3.0.0"]
+          },
+          "minor",
+          {
+            "if": [
+              {
+                "sem_ver": [{ "var": "version" }, "^", "3.0.0"]
+              },
+              "major",
+              "none"
+            ]
+          }
+        ]
+      }
+    },
+    "test-cat": {
+      "state": "ENABLED",
+      "variants": {
+        "minor": "minor",
+        "major": "major",
+        "none": "none"
+      },
+      "defaultVariant": "none",
+      "targeting": {
+        "cat": ["1", "@"]
+      }
+    },
+    "context-aware": {
+      "state": "ENABLED",
+      "variants": {
+        "internal": "INTERNAL",
+        "external": "EXTERNAL"
+      },
+      "defaultVariant": "external",
+      "targeting": {
+        "if": [
+          {
+            "and": [
+              {
+                "==": [
+                  {
+                    "var": ["fn"]
+                  },
+                  "Sulisław"
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": ["ln"]
+                  },
+                  "Świętopełk"
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": ["age"]
+                  },
+                  29
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": ["customer"]
+                  },
+                  false
+                ]
+              }
+            ]
+          },
+          "internal",
+          "external"
+        ]
+      }
+    },
+    "timestamp-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "past": -1,
+        "future": 1,
+        "none": 0
+      },
+      "defaultVariant": "none",
+      "targeting": {
+        "if": [
+          {
+            ">": [{ "var": "$flagd.timestamp" }, { "var": "time" }]
+          },
+          "past",
+          {
+            "if": [
+              {
+                "<": [{ "var": "$flagd.timestamp" }, { "var": "time" }]
+              },
+              "future",
+              "none"
+            ]
+          }
+        ]
+      }
+    },
+    "wrong-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "one": "uno",
+        "two": "dos"
+      },
+      "defaultVariant": "one"
+    }
+  }
+}

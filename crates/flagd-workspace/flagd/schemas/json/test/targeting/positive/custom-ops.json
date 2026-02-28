@@ -1,0 +1,114 @@
+{
+  "*": [
+    {
+      "fractional": [
+        { "cat": [
+          { "var": "$flagd.flagKey" },
+          { "var": "user.name" }
+        ]},
+        ["clubs", 25],
+        ["diamonds", 25],
+        ["hearts", 25],
+        ["spades", 25]
+      ]
+    },
+    {
+      "fractional": [
+        [ "heads" ],
+        [ "tails", 1 ]
+      ]
+    },
+    {
+      "fractional": [
+        ["clubs", 25],
+        ["diamonds", 25],
+        ["hearts", 25],
+        ["spades", 25]
+      ]
+    },
+    {
+      "fractional": [
+        ["clubs", 25],
+        ["diamonds", 25],
+        ["hearts", 25],
+        ["spades", 25]
+      ]
+    },
+    {
+      "if": [
+        {
+          "starts_with": [{ "var": "id" }, "abc"]
+        },
+        "prefix",
+        {
+          "if": [
+            {
+              "ends_with": [{ "var": "id" }, "xyz"]
+            },
+            "postfix",
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "if": [
+        {
+          "sem_ver": [{ "var": "version" }, "=", "2.0.0"]
+        },
+        "equal",
+        {
+          "if": [
+            {
+              "sem_ver": [{ "var": "version" }, ">", "2.0.0"]
+            },
+            "greater",
+            {
+              "if": [
+                {
+                  "sem_ver": [{ "var": "version" }, "<", "2.0.0"]
+                },
+                "lesser",
+                null
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "if": [
+        {
+          "sem_ver": [{ "var": "version" }, "~", "3.0.0"]
+        },
+        "minor",
+        {
+          "if": [
+            {
+              "sem_ver": [{ "var": "version" }, "^", "3.0.0"]
+            },
+            "major",
+            "none"
+          ]
+        }
+      ]
+    },
+    {
+      "if": [
+        {
+          ">": [{ "var": "$flagd.timestamp" }, { "var": "time" }]
+        },
+        "past",
+        {
+          "if": [
+            {
+              "<": [{ "var": "$flagd.timestamp" }, { "var": "time" }]
+            },
+            "future",
+            "none"
+          ]
+        }
+      ]
+    }
+  ]
+}

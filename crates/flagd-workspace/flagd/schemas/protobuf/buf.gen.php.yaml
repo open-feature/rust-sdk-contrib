@@ -1,0 +1,6 @@
+version: v1
+plugins:
+  - plugin: buf.build/grpc/php:v1.56.0
+    out: ../proto/php
+  - plugin: buf.build/protocolbuffers/php:v23.4
+    out: ../proto/php

@@ -1,0 +1,94 @@
+{
+  "bootstrap-sha": "fe68e0310fd817a8f9bc1e2559f2277fed3aed34",
+  "release-type": "simple",
+  "prerelease": false,
+  "bump-minor-pre-major": true,
+  "bump-patch-for-minor-pre-major": true,
+  "include-v-in-tag": true,
+  "signoff": "OpenFeature Bot <109696520+openfeaturebot@users.noreply.github.com>",
+  "extra-files": [
+    {
+      "type": "generic",
+      "path": "docker-compose.yaml",
+      "replacements": [
+        {
+          "type": "string",
+          "search": "\\$\\{VERSION:-v([0-9]+\\.[0-9]+\\.[0-9]+)\\}",
+          "replace": "${VERSION:-v${version}}"
+        }
+      ]
+    }
+  ],
+  "packages": {
+    ".": {
+      "release-type": "simple",
+      "extra-files": [
+        {
+          "type": "generic",
+          "path": "docker-compose.yaml",
+          "replacements": [
+            {
+              "type": "string",
+              "search": "\\$\\{VERSION:-v([0-9]+\\.[0-9]+\\.[0-9]+)\\}",
+              "replace": "${VERSION:-v${version}}"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "changelog-sections": [
+    {
+      "type": "fix",
+      "section": "🐛 Bug Fixes"
+    },
+    {
+      "type": "feat",
+      "section": "✨ New Features"
+    },
+    {
+      "type": "chore",
+      "section": "🧹 Chore"
+    },
+    {
+      "type": "docs",
+      "section": "📚 Documentation"
+    },
+    {
+      "type": "perf",
+      "section": "🚀 Performance"
+    },
+    {
+      "type": "build",
+      "hidden": true,
+      "section": "🛠️ Build"
+    },
+    {
+      "type": "deps",
+      "section": "📦 Dependencies"
+    },
+    {
+      "type": "ci",
+      "hidden": true,
+      "section": "🚦 CI"
+    },
+    {
+      "type": "refactor",
+      "section": "🔄 Refactoring"
+    },
+    {
+      "type": "revert",
+      "section": "🔙 Reverts"
+    },
+    {
+      "type": "style",
+      "hidden": true,
+      "section": "🎨 Styling"
+    },
+    {
+      "type": "test",
+      "hidden": true,
+      "section": "🧪 Tests"
+    }
+  ]
+}

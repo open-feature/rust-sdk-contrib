@@ -1,0 +1,12 @@
+{
+  "flags": {
+    "changing-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "foo": "foo",
+        "bar": "bar"
+      },
+      "defaultVariant": "foo"
+    }
+  }
+}

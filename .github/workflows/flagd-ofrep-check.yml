@@ -3,13 +3,11 @@ name: Flagd Checks
 on:
   push:
     paths:
-      - 'crates/flagd/**'
-      - 'crates/ofrep/**'
+      - 'crates/flagd-workspace/**'
       - '.github/workflows/flagd-ofrep-check.yml'
   pull_request:
     paths:
-      - 'crates/flagd/**'
-      - 'crates/ofrep/**'
+      - 'crates/flagd-workspace/**'
       - '.github/workflows/flagd-ofrep-check.yml'
 
 jobs:
@@ -30,24 +28,24 @@ jobs:
         run: rustup update --no-self-update stable && rustup default stable
 
       - name: Install cargo-msrv and cargo-readme
-        working-directory: crates/flagd
+        working-directory: crates/flagd-workspace
         run: |
           cargo install cargo-msrv --locked
           cargo install cargo-readme
 
       - name: Verify Minimum Supported Rust Version
-        working-directory: crates/flagd
+        working-directory: crates/flagd-workspace/flagd
         run: cargo msrv verify
 
       - name: Check README is up-to-date
-        working-directory: crates/flagd
+        working-directory: crates/flagd-workspace/flagd
         run: |
           cargo readme --no-title --no-license > README.md.generated
           diff README.md README.md.generated
-          
+
       - name: Install and run cargo-audit
+        working-directory: crates/flagd-workspace
         run: |
           cargo install cargo-audit --locked
-          # Run from root directory where Cargo.lock is located
           cargo audit
 

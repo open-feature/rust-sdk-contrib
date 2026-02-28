@@ -1,0 +1,10 @@
+# buf.gen.yaml
+version: v1
+managed:
+  enabled: true
+plugins:
+ # Requires protoc-gen-tonic & protoc-gen-prost to enable service client creation
+  - name: prost
+    out: ../proto/rust
+  - name: tonic
+    out: ../proto/rust

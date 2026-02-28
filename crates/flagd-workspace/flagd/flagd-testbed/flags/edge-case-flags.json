@@ -1,0 +1,57 @@
+{
+  "flags": {
+    "targeting-null-variant-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "one": 1,
+        "two": 2
+      },
+      "defaultVariant": "two",
+      "targeting": {
+        "if": [true, null, "one"]
+      }
+    },
+    "error-targeting-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "one": 1,
+        "two": 2
+      },
+      "defaultVariant": "two",
+      "targeting": {
+        "invalid": ["this is not valid targeting"]
+      }
+    },
+    "missing-variant-targeting-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "one": 1,
+        "two": 2
+      },
+      "defaultVariant": "two",
+      "targeting": {
+        "if": [true, "three", "one"]
+      }
+    },
+    "non-string-variant-targeting-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "false": 1,
+        "true": 2
+      },
+      "defaultVariant": "false",
+      "targeting": {
+        "if": [true, true, false]
+      }
+    },
+    "empty-targeting-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "false": 1,
+        "true": 2
+      },
+      "defaultVariant": "false",
+      "targeting": {}
+    }
+  }
+}

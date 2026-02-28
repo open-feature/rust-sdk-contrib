@@ -1,0 +1,43 @@
+{
+  "flags": {
+    "flagd-context-aware": {
+      "state": "ENABLED",
+      "variants": {
+        "internal": "INTERNAL",
+        "external": "EXTERNAL"
+      },
+      "defaultVariant": "external",
+      "targeting": {
+        "if": [
+          {
+            "==": [
+              {
+                "var": [
+                  "injectedmetadata"
+                ]
+              },
+              "set"
+            ]
+          },
+          "internal",
+          "external"
+        ]
+      }
+    },
+    "metadata-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "true": true,
+        "false": false
+      },
+      "defaultVariant": "false",
+      "targeting": {},
+      "metadata": {
+        "string": "a",
+        "integer": 1,
+        "float": 1.2,
+        "boolean": true
+      }
+    }
+  }
+}

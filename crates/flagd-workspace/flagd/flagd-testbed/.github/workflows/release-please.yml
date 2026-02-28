@@ -1,0 +1,60 @@
+name: Run Release Please
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  FLAGD_IMAGE_NAME: flagd-testbed
+  GO_VERSION: "~1.21"
+
+jobs:
+  release-please:
+    permissions:
+      contents: write # for googleapis/release-please-action to create release commit
+      pull-requests: write # for googleapis/release-please-action to create release PR
+    runs-on: ubuntu-latest
+    # Release-please creates a PR that tracks all changes
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: .release-please-config.json
+          manifest-file: .release-please-manifest.json
+          token: ${{secrets.RELEASE_PLEASE_ACTION_TOKEN}}
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      release_tag_name: ${{ steps.release.outputs.tag_name }}
+
+  build-push:
+    needs: release-please
+    name: build and push image to the github registery
+    permissions:
+      packages: write
+    runs-on: ubuntu-latest
+    if: ${{ needs.release-please.outputs.release_created }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          ref: ${{ needs.release-please.outputs.release_tag_name }}
+      - name: Log in to the Container registry
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push flagd-testbed Docker image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6
+        with:
+          context: .
+          file: flagd/Dockerfile
+          target: testbed
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/open-feature/${{ env.FLAGD_IMAGE_NAME }}:${{ needs.release-please.outputs.release_tag_name }}
+            ${{ env.REGISTRY }}/open-feature/${{ env.FLAGD_IMAGE_NAME }}:latest

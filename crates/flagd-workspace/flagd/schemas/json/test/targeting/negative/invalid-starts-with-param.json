@@ -1,0 +1,9 @@
+{
+  "if": [
+    {
+      "starts_with": [{ "var": "id" }, 0]
+    },
+    "prefix",
+    "postfix"
+  ]
+}

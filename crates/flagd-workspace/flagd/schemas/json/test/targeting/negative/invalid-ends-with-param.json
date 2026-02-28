@@ -1,0 +1,9 @@
+{
+  "if": [
+    {
+      "ends_with": [{ "var": "id" }, 0]
+    },
+    "postfix",
+    "prefix"
+  ]
+}

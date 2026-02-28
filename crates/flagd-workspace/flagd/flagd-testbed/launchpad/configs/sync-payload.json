@@ -1,0 +1,16 @@
+{
+  "sources": [
+    {
+      "uri": "flags/allFlags.json",
+      "provider": "file"
+    },
+    {
+      "uri": "rawflags/selector-flags.json",
+      "provider": "file"
+    }
+  ],
+  "context-value": {
+    "injectedmetadata": "set"
+  },
+  "disable-sync-metadata" : true
+}

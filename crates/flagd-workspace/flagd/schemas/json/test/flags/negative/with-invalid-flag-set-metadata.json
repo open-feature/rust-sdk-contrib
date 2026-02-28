@@ -1,0 +1,16 @@
+{
+  "$schema": "../../../flags.json",
+  "flags": {
+    "myBoolFlag": {
+      "state": "ENABLED",
+      "variants": {
+        "on": true,
+        "off": false
+      },
+      "defaultVariant": "on"
+    }
+  },
+  "metadata": {
+    "invalid": { "key": "value" }
+  }
+}
