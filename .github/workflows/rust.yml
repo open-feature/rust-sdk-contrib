@@ -38,6 +38,11 @@ jobs:
     - name: Run main workspace tests
       run: cargo test --workspace --verbose
 
+    - name: Install protobuf compiler
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y protobuf-compiler
+
     - name: Run flagd-workspace tests
       run: cargo test --workspace --verbose
       working-directory: crates/flagd-workspace
@@ -54,6 +59,11 @@ jobs:
       - name: Check flagd-workspace formats
         run: cargo fmt --check
         working-directory: crates/flagd-workspace
+
+      - name: Install protobuf compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
 
       - name: Setup cache
         uses: Swatinem/rust-cache@v2
