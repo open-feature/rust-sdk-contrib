@@ -39,7 +39,7 @@ tonic-prost-build = "0.14"
 [dev-dependencies]
 cucumber = "0.22"
 futures-core = "0.3"
-testcontainers = { version = "0.27.0", features = ["http_wait", "blocking"] }
+testcontainers = { version = "0.27", features = ["http_wait", "blocking"] }
 wiremock = "0.6.5"
 tempfile = "3.24.0"
 serial_test = "3.2"
