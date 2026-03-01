@@ -3,7 +3,7 @@ pub use flagd_evaluation_engine::model;
 pub use flagd_evaluation_engine::targeting;
 
 pub use flagd_evaluation_engine::Operator;
-pub use flagd_evaluation_engine::error::FlagdEvaluationError as FlagdError;
+pub use flagd_evaluation_engine::error::FlagdEvaluationError;
 pub use flagd_evaluation_engine::{FeatureFlag, FlagParser};
 
 // Storage module (async storage - specific to flagd)

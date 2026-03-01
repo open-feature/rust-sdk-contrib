@@ -23,23 +23,22 @@ cargo add flagd-evaluation-engine
 use flagd_evaluation_engine::{FlagdEvaluationError, FeatureFlag, FlagParser, Operator};
 use open_feature::EvaluationContext;
 
-#[tokio::main]
-async fn main() {
+fn main() {
     // Create the operator for evaluating targeting rules
     let operator = Operator::new();
-    
+
     // Create evaluation context
     let context = EvaluationContext::default()
         .with_targeting_key("user-123")
         .with_custom_field("tier", "premium");
-    
-    // Apply a targeting rule
+
+    // Apply a targeting rule (synchronous)
     let result = operator.apply(
         "my-flag",
         r#"{"if": [{"==": [{"var": "tier"}, "premium"]}, "gold", "silver"]}"#,
-        &context
+        &context,
     );
-    
+
     println!("Result: {:?}", result);
 }
 ```
