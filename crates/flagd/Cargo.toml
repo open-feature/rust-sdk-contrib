@@ -27,7 +27,7 @@ default = ["rpc", "rest", "in-process"]
 # RPC evaluation mode - uses gRPC to connect to flagd service
 rpc = ["dep:tonic", "dep:tonic-prost", "dep:prost", "dep:prost-types", "dep:hyper-util", "dep:tower"]
 # REST evaluation mode - uses HTTP/OFREP to connect to flagd service
-rest = ["dep:open-feature-ofrep"]
+rest = ["dep:open-feature-ofrep", "dep:reqwest"]
 # In-process evaluation mode - local evaluation with gRPC sync or file-based configuration
 in-process = ["dep:flagd-evaluation-engine", "dep:tonic", "dep:tonic-prost", "dep:prost", "dep:prost-types", "dep:datalogic-rs", "dep:murmurhash3", "dep:semver", "dep:notify", "dep:hyper-util", "dep:tower"]
 
