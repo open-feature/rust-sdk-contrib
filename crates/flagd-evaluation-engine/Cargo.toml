@@ -12,19 +12,19 @@ license = "Apache-2.0"
 
 [dependencies]
 # Core evaluation dependencies
-datalogic-rs = "4.0.4"
-murmurhash3 = "0.0.5"
-semver = "1.0"
+datalogic-rs = { workspace = true }
+murmurhash3 = { workspace = true }
+semver = { workspace = true }
 
 # JSON and serialization
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 # Logging
-tracing = "0.1"
+tracing = { workspace = true }
 
 # Error handling
-thiserror = "2.0"
+thiserror = { workspace = true }
 
 # OpenFeature SDK (for EvaluationContext types)
-open-feature = "0.2"
+open-feature = { workspace = true }
