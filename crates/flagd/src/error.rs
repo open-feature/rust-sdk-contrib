@@ -62,32 +62,3 @@ impl From<flagd_evaluation_engine::error::FlagdEvaluationError> for FlagdError {
         }
     }
 }
-
-impl From<FlagdError> for flagd_evaluation_engine::error::FlagdEvaluationError {
-    fn from(error: FlagdError) -> Self {
-        match error {
-            FlagdError::Provider(s) => {
-                flagd_evaluation_engine::error::FlagdEvaluationError::Provider(s)
-            }
-            FlagdError::Config(s) => {
-                flagd_evaluation_engine::error::FlagdEvaluationError::Config(s)
-            }
-            FlagdError::Parse(s) => flagd_evaluation_engine::error::FlagdEvaluationError::Parse(s),
-            FlagdError::Io(e) => flagd_evaluation_engine::error::FlagdEvaluationError::Io(e),
-            FlagdError::Json(e) => flagd_evaluation_engine::error::FlagdEvaluationError::Json(e),
-            // Map other variants to Provider
-            FlagdError::Connection(s) => {
-                flagd_evaluation_engine::error::FlagdEvaluationError::Provider(s)
-            }
-            FlagdError::Sync(s) => {
-                flagd_evaluation_engine::error::FlagdEvaluationError::Provider(s)
-            }
-            FlagdError::Channel(s) => {
-                flagd_evaluation_engine::error::FlagdEvaluationError::Provider(s)
-            }
-            FlagdError::Timeout(s) => {
-                flagd_evaluation_engine::error::FlagdEvaluationError::Provider(s)
-            }
-        }
-    }
-}
