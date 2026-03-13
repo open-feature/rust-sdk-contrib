@@ -6,6 +6,8 @@ components:
   crates/flagd:
     - erenatas
     - sheepduke
+  crates/flagd-evaluation-engine:
+    - erenatas
   crates/flipt:
     - tamaroning
   crates/ofrep:

@@ -79,4 +79,4 @@ semver = { version = "1.0.27", optional = true }
 notify = { version = "8.2", optional = true }
 
 # Evaluation engine (extracted to separate crate)
-flagd-evaluation-engine = { path = "../flagd-evaluation-engine", optional = true }
+flagd-evaluation-engine = { path = "../flagd-evaluation-engine", version = "0.0.1", optional = true }

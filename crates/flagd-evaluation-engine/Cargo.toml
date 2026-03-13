@@ -1,6 +1,6 @@
 [package]
 name = "flagd-evaluation-engine"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2024"
 rust-version = "1.88" # MSRV
 description = "Evaluation engine for flagd - JSONLogic-based targeting rules"

@@ -6,6 +6,7 @@
   "packages": {
     "crates/env-var": {},
     "crates/flagd": {},
+    "crates/flagd-evaluation-engine": {},
     "crates/flipt": {},
     "crates/ofrep": {}
   },
