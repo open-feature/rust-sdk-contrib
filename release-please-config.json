@@ -6,14 +6,17 @@
   "packages": {
     "crates/env-var": {},
     "crates/flagd": {
-      "package-group": "flagd-group"
+      "package-group": "flagd-group",
+      "separate-pull-requests": false
     },
     "crates/flagd-evaluation-engine": {
-      "package-group": "flagd-group"
+      "package-group": "flagd-group",
+      "separate-pull-requests": false
     },
     "crates/flipt": {},
     "crates/ofrep": {
-      "package-group": "flagd-group"
+      "package-group": "flagd-group",
+      "separate-pull-requests": false
     }
   },
   "changelog-sections": [
