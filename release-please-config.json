@@ -5,9 +5,16 @@
   "bump-patch-for-minor-pre-major": true,
   "packages": {
     "crates/env-var": {},
-    "crates/flagd": {},
+    "crates/flagd": {
+      "package-group": "flagd-group"
+    },
+    "crates/flagd-evaluation-engine": {
+      "package-group": "flagd-group"
+    },
     "crates/flipt": {},
-    "crates/ofrep": {}
+    "crates/ofrep": {
+      "package-group": "flagd-group"
+    }
   },
   "changelog-sections": [
     {
