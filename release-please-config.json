@@ -1,23 +1,21 @@
 {
   "separate-pull-requests": true,
   "release-type": "rust",
+  "signoff": "OpenFeature Bot <109696520+openfeaturebot@users.noreply.github.com>",
   "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": true,
+  "plugins": [
+    {
+      "type": "cargo-workspace",
+      "merge": false
+    }
+  ],
   "packages": {
     "crates/env-var": {},
-    "crates/flagd": {
-      "package-group": "flagd-group",
-      "separate-pull-requests": false
-    },
-    "crates/flagd-evaluation-engine": {
-      "package-group": "flagd-group",
-      "separate-pull-requests": false
-    },
+    "crates/flagd": {},
+    "crates/flagd-evaluation-engine": {},
     "crates/flipt": {},
-    "crates/ofrep": {
-      "package-group": "flagd-group",
-      "separate-pull-requests": false
-    }
+    "crates/ofrep": {}
   },
   "changelog-sections": [
     {
