@@ -8,6 +8,11 @@
     {
       "type": "cargo-workspace",
       "merge": false
+    },
+    {
+      "type": "linked-versions",
+      "groupName": "flagd",
+      "components": ["open-feature-flagd", "flagd-evaluation-engine", "open-feature-ofrep"]
     }
   ],
   "packages": {
