@@ -7,7 +7,7 @@ edition = "2024"
 
 [dependencies]
 flipt = "=1.1.1"
-open-feature = "0.2.7"
+open-feature = "0.3.0"
 serde_json = "1.0"
 # FIXME: openfeature-rust-sdk-contrib should export this
 async-trait = "0.1"
