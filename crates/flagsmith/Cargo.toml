@@ -23,7 +23,7 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 async-trait = "0.1"
 
 # Error handling
-thiserror = "1.0"
+thiserror = "2.0"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
