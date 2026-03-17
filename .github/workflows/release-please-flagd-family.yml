@@ -1,4 +1,4 @@
-name: Run Release Please
+name: Release Please Flagd Family
 
 on:
   push:
@@ -15,7 +15,7 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7
+      - uses: googleapis/release-please-action@v4
         id: release
         with:
           token: ${{ secrets.RELEASE_PLEASE_ACTION_TOKEN }}
@@ -35,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ fromJSON(needs.release-please.outputs.release_created || false) }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
 
@@ -48,16 +48,16 @@ jobs:
         run: rustup update --no-self-update stable && rustup default stable
 
       - name: Setup cache
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4
+        uses: Swatinem/rust-cache@v2
 
-      - name: Publish released crates
+      - name: Publish released crates in dependency order
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
           PATHS_RELEASED: ${{ needs.release-please.outputs.paths_released }}
         run: |
           publish_if_released() {
             crate_path="$1"
-            if ! echo "$PATHS_RELEASED" | jq -e --arg path "$crate_path" 'index($path)' >/dev/null; then
+            if ! echo "$PATHS_RELEASED" | jq -e --arg path "$crate_path" 'fromjson | index($path)' >/dev/null; then
               return 0
             fi
 
@@ -77,6 +77,3 @@ jobs:
           publish_if_released crates/flagd-evaluation-engine
           publish_if_released crates/ofrep
           publish_if_released crates/flagd
-          publish_if_released crates/env-var
-          publish_if_released crates/flipt
-          publish_if_released crates/flagsmith
