@@ -475,7 +475,7 @@ impl FlagdProvider {
             #[cfg(feature = "rest")]
             ResolverType::Rest => {
                 debug!("Using REST resolver");
-                Arc::new(RestResolver::new(&options)?)
+                Arc::new(RestResolver::new(&options).await?)
             }
             #[cfg(feature = "in-process")]
             ResolverType::InProcess => {

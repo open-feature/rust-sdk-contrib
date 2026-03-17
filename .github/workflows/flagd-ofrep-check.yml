@@ -4,11 +4,13 @@ on:
   push:
     paths:
       - 'crates/flagd/**'
+      - 'crates/flagd-evaluation-engine/**'
       - 'crates/ofrep/**'
       - '.github/workflows/flagd-ofrep-check.yml'
   pull_request:
     paths:
       - 'crates/flagd/**'
+      - 'crates/flagd-evaluation-engine/**'
       - 'crates/ofrep/**'
       - '.github/workflows/flagd-ofrep-check.yml'
 
@@ -50,4 +52,3 @@ jobs:
           cargo install cargo-audit --locked
           # Run from root directory where Cargo.lock is located
           cargo audit
-
