@@ -124,7 +124,7 @@ impl OfrepProvider {
         }
 
         Ok(Self {
-            provider: Arc::new(Resolver::new(&options)),
+            provider: Arc::new(Resolver::new(&options)?),
         })
     }
 }
@@ -205,6 +205,24 @@ mod tests {
         assert_eq!(
             provider_with_invalid_scheme.unwrap_err(),
             OfrepError::Config("Invalid base url: 'invalid' (unsupported scheme)".to_string())
+        );
+    }
+
+    #[test(tokio::test)]
+    async fn test_ofrep_provider_with_https_missing_cert_fails() {
+        let provider = OfrepProvider::new(OfrepOptions {
+            base_url: "https://localhost:8016".to_string(),
+            cert_path: Some("/nonexistent/path/to/cert.pem".to_string()),
+            ..Default::default()
+        })
+        .await;
+
+        assert_eq!(
+            provider.unwrap_err(),
+            OfrepError::Config(
+                "Failed to read certificate file '/nonexistent/path/to/cert.pem': No such file or directory (os error 2)"
+                    .to_string()
+            )
         );
     }
 }
