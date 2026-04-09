@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.2.0](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagd-v0.1.0...open-feature-flagd-v0.2.0) (2026-04-09)
+
+
+### ⚠ BREAKING CHANGES
+
+* flagd, wire up TLS support for gRPC connections ([#95](https://github.com/open-feature/rust-sdk-contrib/issues/95))
+
+### 🐛 Bug Fixes
+
+* flagd, wire up TLS support for gRPC connections ([#95](https://github.com/open-feature/rust-sdk-contrib/issues/95)) ([38bf6d0](https://github.com/open-feature/rust-sdk-contrib/commit/38bf6d0ab0028446df6f808496045f25191ed086))
+
+
+### ✨ New Features
+
+* **flagd:** integrate OFREP provider for REST mode ([#117](https://github.com/open-feature/rust-sdk-contrib/issues/117)) ([c54bc6d](https://github.com/open-feature/rust-sdk-contrib/commit/c54bc6dae86509954f24669c19f54d4a4506889a))
+
+
+### 🧹 Chore
+
+* **deps:** update rust crate testcontainers to 0.27.0 ([#100](https://github.com/open-feature/rust-sdk-contrib/issues/100)) ([ada60a0](https://github.com/open-feature/rust-sdk-contrib/commit/ada60a07f36adf57dd485052d11af47bde5f09e6))
+* enable release-please for flagd-evaluation-engine ([#111](https://github.com/open-feature/rust-sdk-contrib/issues/111)) ([c1ea70f](https://github.com/open-feature/rust-sdk-contrib/commit/c1ea70f91a7e63178f1f4fbb561a685f208fa3af))
+
+
+### 🔄 Refactoring
+
+* **chore:** define shared dependencies in workspace Cargo.toml ([#106](https://github.com/open-feature/rust-sdk-contrib/issues/106)) ([f2758c5](https://github.com/open-feature/rust-sdk-contrib/commit/f2758c57941f082672ef02ae615f3bddf090b831))
+* extract flagd evaluation engine to its own crate ([#105](https://github.com/open-feature/rust-sdk-contrib/issues/105)) ([f6fc25e](https://github.com/open-feature/rust-sdk-contrib/commit/f6fc25ea76b6a45515e7afb9871ad2a382460b36))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * flagd-evaluation-engine bumped from 0.0.1 to 0.0.2
+    * open-feature-ofrep bumped from 0.0.4 to 0.1.0
+
 ## [0.1.0](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagd-v0.0.8...open-feature-flagd-v0.1.0) (2025-12-23)
 
 
