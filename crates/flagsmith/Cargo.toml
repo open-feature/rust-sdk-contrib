@@ -36,7 +36,7 @@ tracing = "0.1"
 url = "2.5"
 
 # HTTP client (for HeaderMap type) - must match flagsmith's reqwest version
-reqwest = { version = "0.11", default-features = false }
+reqwest = { version = "0.13", default-features = false }
 
 # Flagsmith flag engine types (must match flagsmith version)
 flagsmith-flag-engine = "0.5"
