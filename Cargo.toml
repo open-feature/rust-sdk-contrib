@@ -36,7 +36,7 @@ tracing = "0.1"
 thiserror = "2.0"
 
 # OpenFeature SDK
-open-feature = "0.2"
+open-feature = "0.3"
 
 # Async runtime
 async-trait = "0.1"
