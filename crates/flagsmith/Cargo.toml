@@ -13,7 +13,7 @@ keywords = ["openfeature", "feature-flags", "flagsmith"]
 
 [dependencies]
 # OpenFeature SDK
-open-feature = "0.2"
+open-feature = "0.3"
 
 # Flagsmith SDK
 flagsmith = "2.1"
