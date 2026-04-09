@@ -79,6 +79,9 @@ pub struct OfrepOptions {
     pub base_url: String,
     pub headers: HeaderMap,
     pub connect_timeout: Duration,
+    /// Path to a PEM-encoded CA certificate file for TLS connections.
+    /// If provided along with https scheme, the certificate is loaded and used as the trusted CA.
+    pub cert_path: Option<String>,
 }
 
 impl Default for OfrepOptions {
@@ -87,6 +90,7 @@ impl Default for OfrepOptions {
             base_url: DEFAULT_BASE_URL.to_string(),
             headers: HeaderMap::new(),
             connect_timeout: DEFAULT_CONNECT_TIMEOUT,
+            cert_path: None,
         }
     }
 }
@@ -120,7 +124,7 @@ impl OfrepProvider {
         }
 
         Ok(Self {
-            provider: Arc::new(Resolver::new(&options)),
+            provider: Arc::new(Resolver::new(&options)?),
         })
     }
 }
@@ -201,6 +205,24 @@ mod tests {
         assert_eq!(
             provider_with_invalid_scheme.unwrap_err(),
             OfrepError::Config("Invalid base url: 'invalid' (unsupported scheme)".to_string())
+        );
+    }
+
+    #[test(tokio::test)]
+    async fn test_ofrep_provider_with_https_missing_cert_fails() {
+        let provider = OfrepProvider::new(OfrepOptions {
+            base_url: "https://localhost:8016".to_string(),
+            cert_path: Some("/nonexistent/path/to/cert.pem".to_string()),
+            ..Default::default()
+        })
+        .await;
+
+        assert_eq!(
+            provider.unwrap_err(),
+            OfrepError::Config(
+                "Failed to read certificate file '/nonexistent/path/to/cert.pem': No such file or directory (os error 2)"
+                    .to_string()
+            )
         );
     }
 }
