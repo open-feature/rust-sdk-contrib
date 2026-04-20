@@ -11,12 +11,15 @@ edition = "2024"
 resolver = "2"
 
 members = [
-    "crates/env-var",
     "crates/flagd",
     "crates/flagd-evaluation-engine",
-    "crates/flagsmith",
-    "crates/flipt",
     "crates/ofrep"
+]
+
+exclude = [
+    "crates/env-var",
+    "crates/flagsmith",
+    "crates/flipt"
 ]
 
 [workspace.dependencies]
