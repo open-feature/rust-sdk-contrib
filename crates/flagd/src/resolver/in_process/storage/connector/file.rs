@@ -235,20 +235,29 @@ mod tests {
         // Update the file
         std::fs::write(&file_path, r#"{"flags": {"v2": {}}}"#).unwrap();
 
-        // Wait for the file watcher to detect the change
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        // Wait for and verify we receive the updated content.
+        // Loop with timeout to handle file watcher timing variations across systems.
+        let mut received_v2 = false;
+        let start = std::time::Instant::now();
+        while start.elapsed() < std::time::Duration::from_secs(3) {
+            let result = tokio::time::timeout(
+                std::time::Duration::from_millis(500),
+                receiver.as_mut().unwrap().recv(),
+            )
+            .await;
 
-        // Try to receive the update (with timeout)
-        let result = tokio::time::timeout(
-            std::time::Duration::from_secs(2),
-            receiver.as_mut().unwrap().recv(),
-        )
-        .await;
-
-        if let Ok(Some(payload)) = result {
-            assert_eq!(payload.payload_type, QueuePayloadType::Data);
-            assert!(payload.flag_data.contains("v2"));
+            if let Ok(Some(payload)) = result {
+                if payload.flag_data.contains("v2") {
+                    received_v2 = true;
+                    break;
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         }
-        // Note: File watching behavior may vary by OS, so we don't fail if no update received
+
+        assert!(
+            received_v2,
+            "File connector did not receive updated content after file change"
+        );
     }
 }

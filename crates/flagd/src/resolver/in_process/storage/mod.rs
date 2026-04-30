@@ -1,6 +1,8 @@
 pub mod connector;
 use crate::error::FlagdError;
-pub use connector::{Connector, QueuePayload, QueuePayloadType};
+pub use connector::{
+    Connector, FileConnector, GrpcStreamConnector, QueuePayload, QueuePayloadType,
+};
 use tracing::{debug, error, warn};
 
 use crate::resolver::in_process::model::feature_flag::FeatureFlag;

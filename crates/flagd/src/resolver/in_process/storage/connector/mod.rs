@@ -1,6 +1,9 @@
 pub mod file;
 pub mod grpc;
 
+pub use file::FileConnector;
+pub use grpc::GrpcStreamConnector;
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;

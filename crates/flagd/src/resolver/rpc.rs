@@ -391,7 +391,7 @@ mod tests {
     use tokio::net::UnixListener;
     use tokio::sync::oneshot;
     use tokio::{net::TcpListener, time::Instant};
-    use tokio_stream::wrappers::UnixListenerStream;
+    use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
     use tonic::{Request, Response, Status, transport::Server};
 
     pub struct MockFlagService;
@@ -524,7 +524,7 @@ mod tests {
 
             let server = tonic::transport::Server::builder()
                 .add_service(ServiceServer::new(MockFlagService))
-                .serve(addr);
+                .serve_with_incoming(TcpListenerStream::new(listener));
 
             tokio::spawn(async move {
                 tokio::select! {

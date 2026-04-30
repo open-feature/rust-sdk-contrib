@@ -35,8 +35,28 @@ jobs:
     - name: Setup cache
       uses: Swatinem/rust-cache@v2
 
-    - name: Run all workspace tests
-      run:  cargo test --workspace --verbose
+    - name: Run workspace tests
+      if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+      run: cargo test --workspace --verbose
+
+    - name: Run release crate tests
+      if: ${{ startsWith(github.head_ref, 'release-please--') }}
+      run: |
+        COMPONENT=$(echo "${{ github.head_ref }}" | sed 's/release-please--branches--main--components--//')
+        CRATE_DIR=$(find crates -maxdepth 1 -type d | while read dir; do
+          if [ -f "$dir/Cargo.toml" ]; then
+            PKG=$(grep '^name = ' "$dir/Cargo.toml" | head -1 | sed 's/name = "//;s/"//')
+            if [ "$PKG" = "$COMPONENT" ]; then
+              echo "$dir"
+              break
+            fi
+          fi
+        done)
+        if [ -n "$CRATE_DIR" ]; then
+          cargo test -p "$COMPONENT" --verbose
+        else
+          cargo test --workspace --verbose
+        fi
 
   lint:
     runs-on: ubuntu-latest
@@ -51,4 +71,11 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Check code quality
+        if: ${{ !startsWith(github.head_ref, 'release-please--') }}
         run: cargo clippy -- -D warnings
+
+      - name: Check release crate quality
+        if: ${{ startsWith(github.head_ref, 'release-please--') }}
+        run: |
+          COMPONENT=$(echo "${{ github.head_ref }}" | sed 's/release-please--branches--main--components--//')
+          cargo clippy -p "$COMPONENT" -- -D warnings

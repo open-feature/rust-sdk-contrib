@@ -6,14 +6,14 @@ use open_feature::{
     EvaluationContext, EvaluationContextFieldValue, EvaluationError, EvaluationErrorCode,
     EvaluationResult, StructValue, Value,
 };
-use reqwest::Client;
-use reqwest::StatusCode;
 use reqwest::header::RETRY_AFTER;
+use reqwest::{Certificate, Client, StatusCode};
 use std::any;
 use tokio::sync::Mutex;
 use tracing::{debug, error, instrument};
+use url::Url;
 
-use crate::OfrepOptions;
+use crate::{OfrepError, OfrepOptions};
 
 static CURRENT_RETRY_AFTER: Lazy<Mutex<DateTime<Utc>>> = Lazy::new(|| Mutex::new(Utc::now()));
 
@@ -25,16 +25,41 @@ pub struct Resolver {
 }
 
 impl Resolver {
-    pub fn new(options: &OfrepOptions) -> Self {
-        Self {
+    pub fn new(options: &OfrepOptions) -> Result<Self, OfrepError> {
+        Ok(Self {
             base_url: options.base_url.clone(),
             metadata: ProviderMetadata::new("ofrep"),
-            client: Client::builder()
-                .default_headers(options.headers.clone())
-                .connect_timeout(options.connect_timeout)
-                .build()
-                .expect("Failed to build HTTP client"),
+            client: Self::build_client(options)?,
+        })
+    }
+
+    fn build_client(options: &OfrepOptions) -> Result<Client, OfrepError> {
+        let mut client_builder = Client::builder()
+            .default_headers(options.headers.clone())
+            .connect_timeout(options.connect_timeout);
+
+        let url = Url::parse(&options.base_url).map_err(|e| {
+            OfrepError::Config(format!("Invalid base url: '{}' ({})", options.base_url, e))
+        })?;
+
+        if url.scheme() == "https"
+            && let Some(path) = options.cert_path.as_deref()
+        {
+            let cert_pem = std::fs::read(path).map_err(|e| {
+                OfrepError::Config(format!("Failed to read certificate file '{}': {}", path, e))
+            })?;
+            let ca_cert = Certificate::from_pem(&cert_pem).map_err(|e| {
+                OfrepError::Config(format!(
+                    "Failed to parse certificate file '{}': {}",
+                    path, e
+                ))
+            })?;
+            client_builder = client_builder.add_root_certificate(ca_cert);
         }
+
+        client_builder
+            .build()
+            .map_err(|e| OfrepError::Config(format!("Failed to build HTTP client: {}", e)))
     }
 
     async fn parse_retry_after(retry_after: &str) -> DateTime<Utc> {
@@ -323,8 +348,47 @@ mod tests {
             base_url: mock_server.uri(),
             ..Default::default()
         };
-        let resolver = Resolver::new(&options);
+        let resolver = Resolver::new(&options).unwrap();
         (mock_server, resolver)
+    }
+
+    fn test_cert_path() -> String {
+        format!(
+            "{}/../flagd/flagd-testbed/ssl/custom-root-cert.crt",
+            env!("CARGO_MANIFEST_DIR")
+        )
+    }
+
+    #[test]
+    fn test_resolver_new_with_https_custom_ca() {
+        let options = OfrepOptions {
+            base_url: "https://localhost:8016".to_string(),
+            cert_path: Some(test_cert_path()),
+            ..Default::default()
+        };
+
+        let resolver = Resolver::new(&options);
+
+        assert!(resolver.is_ok());
+    }
+
+    #[test]
+    fn test_resolver_new_with_https_missing_cert_fails() {
+        let options = OfrepOptions {
+            base_url: "https://localhost:8016".to_string(),
+            cert_path: Some("/nonexistent/path/to/cert.pem".to_string()),
+            ..Default::default()
+        };
+
+        let resolver = Resolver::new(&options);
+
+        assert_eq!(
+            resolver.unwrap_err(),
+            OfrepError::Config(
+                "Failed to read certificate file '/nonexistent/path/to/cert.pem': No such file or directory (os error 2)"
+                    .to_string()
+            )
+        );
     }
 
     #[test(tokio::test)]

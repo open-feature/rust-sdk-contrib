@@ -46,3 +46,19 @@ impl From<tokio::time::error::Elapsed> for FlagdError {
         FlagdError::Timeout(error.to_string())
     }
 }
+
+impl From<flagd_evaluation_engine::error::FlagdEvaluationError> for FlagdError {
+    fn from(error: flagd_evaluation_engine::error::FlagdEvaluationError) -> Self {
+        match error {
+            flagd_evaluation_engine::error::FlagdEvaluationError::Provider(s) => {
+                FlagdError::Provider(s)
+            }
+            flagd_evaluation_engine::error::FlagdEvaluationError::Config(s) => {
+                FlagdError::Config(s)
+            }
+            flagd_evaluation_engine::error::FlagdEvaluationError::Parse(s) => FlagdError::Parse(s),
+            flagd_evaluation_engine::error::FlagdEvaluationError::Io(e) => FlagdError::Io(e),
+            flagd_evaluation_engine::error::FlagdEvaluationError::Json(e) => FlagdError::Json(e),
+        }
+    }
+}
