@@ -21,9 +21,7 @@ members = [
 
 [workspace.dependencies]
 # Core evaluation
-datalogic-rs = "4.0.4"
-murmurhash3 = "0.0.5"
-semver = "1.0"
+datalogic-rs = { version = "5", features = ["serde_json", "flagd", "ext-string"] }
 
 # JSON and serialization
 serde = { version = "1.0", features = ["derive"] }
