@@ -23,9 +23,14 @@ impl Operator {
         targeting_rule: &str,
         ctx: &EvaluationContext,
     ) -> Result<Option<String>, FlagdEvaluationError> {
+        // Parse the rule eagerly so malformed JSON surfaces as
+        // FlagdEvaluationError::Json (via the From<serde_json::Error>
+        // impl in error.rs) instead of being swallowed to Ok(None) by
+        // the catch-all Err arm below.
+        let rule: Value = serde_json::from_str(targeting_rule)?;
         let context_data = build_context(flag_key, ctx);
 
-        match datalogic_rs::eval_into::<Value, _, _>(targeting_rule, &context_data) {
+        match datalogic_rs::eval_into::<Value, _, _>(&rule, &context_data) {
             Ok(Value::String(s)) => Ok(Some(s)),
             Ok(Value::Null) => Ok(None),
             Ok(other) => Ok(Some(other.to_string())),
@@ -273,5 +278,14 @@ mod tests {
         let rule = "null";
         let result = operator.apply("test-flag", rule, &ctx).unwrap();
         assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_apply_malformed_rule_propagates_error() {
+        let operator = Operator::new();
+        let ctx = EvaluationContext::default();
+
+        let result = operator.apply("test-flag", "{ this is not json", &ctx);
+        assert!(matches!(result, Err(FlagdEvaluationError::Json(_))));
     }
 }
