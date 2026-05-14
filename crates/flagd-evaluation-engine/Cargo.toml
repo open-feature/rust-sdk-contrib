@@ -13,8 +13,6 @@ license = "Apache-2.0"
 [dependencies]
 # Core evaluation dependencies
 datalogic-rs = { workspace = true }
-murmurhash3 = { workspace = true }
-semver = { workspace = true }
 
 # JSON and serialization
 serde = { workspace = true }
