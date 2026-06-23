@@ -5,7 +5,7 @@ documentation = "https://docs.rs/open-feature-ofrep"
 homepage = "https://openfeature.dev/"
 license = "Apache-2.0"
 repository = "https://github.com/open-feature/rust-sdk-contrib"
-version = "0.0.4"
+version = "0.1.0"
 edition = "2024"
 rust-version = "1.85.1"
 
