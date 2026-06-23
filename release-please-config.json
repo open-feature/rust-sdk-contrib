@@ -11,8 +11,11 @@
     }
   ],
   "packages": {
+    "crates/env-var": {},
     "crates/flagd": {},
     "crates/flagd-evaluation-engine": {},
+    "crates/flagsmith": {},
+    "crates/flipt": {},
     "crates/ofrep": {}
   },
   "changelog-sections": [

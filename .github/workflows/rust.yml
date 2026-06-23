@@ -14,14 +14,13 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  STANDALONE_MANIFESTS: "crates/env-var/Cargo.toml crates/flipt/Cargo.toml crates/flagsmith/Cargo.toml"
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       with:
         submodules: recursive
 
@@ -34,18 +33,11 @@ jobs:
       run: rustup update --no-self-update stable && rustup default stable
 
     - name: Setup cache
-      uses: Swatinem/rust-cache@v2
+      uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4
 
-    - name: Run flagd family workspace tests
+    - name: Run workspace tests
       if: ${{ !startsWith(github.head_ref, 'release-please--') }}
       run: cargo test --workspace --verbose
-
-    - name: Run standalone crate tests
-      if: ${{ !startsWith(github.head_ref, 'release-please--') }}
-      run: |
-        for manifest in $STANDALONE_MANIFESTS; do
-          cargo test --manifest-path "$manifest" --verbose
-        done
 
     - name: Run release crate tests
       if: ${{ startsWith(github.head_ref, 'release-please--') }}
@@ -70,7 +62,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          submodules: recursive
 
       - name: Install protobuf compiler
         run: |
@@ -81,25 +75,14 @@ jobs:
         run: rustup update --no-self-update stable && rustup default stable
 
       - name: Check formats
-        run: |
-          cargo fmt --all --check
-          for manifest in $STANDALONE_MANIFESTS; do
-            cargo fmt --manifest-path "$manifest" --check
-          done
+        run: cargo fmt --all --check
 
       - name: Setup cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4
 
-      - name: Check flagd family workspace quality
+      - name: Check workspace quality
         if: ${{ !startsWith(github.head_ref, 'release-please--') }}
         run: cargo clippy --workspace -- -D warnings
-
-      - name: Check standalone crate quality
-        if: ${{ !startsWith(github.head_ref, 'release-please--') }}
-        run: |
-          for manifest in $STANDALONE_MANIFESTS; do
-            cargo clippy --manifest-path "$manifest" -- -D warnings
-          done
 
       - name: Check release crate quality
         if: ${{ startsWith(github.head_ref, 'release-please--') }}
