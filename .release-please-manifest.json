@@ -1,5 +1,5 @@
 {
-  "crates/flagd": "0.1.0",
+  "crates/flagd": "0.2.0",
   "crates/ofrep": "0.0.4",
   "crates/flagd-evaluation-engine": "0.0.1"
 }
