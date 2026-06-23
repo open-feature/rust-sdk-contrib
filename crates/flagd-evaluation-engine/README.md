@@ -10,7 +10,6 @@ A JSONLogic-based evaluation engine for flagd, providing local flag evaluation w
 - **String Operations**: Custom operators for "starts_with" and "ends_with" comparisons
 
 ## Installation
-
 Add the dependency in your `Cargo.toml`:
 
 ```bash
