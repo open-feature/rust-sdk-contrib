@@ -4,17 +4,16 @@
   "signoff": "OpenFeature Bot <109696520+openfeaturebot@users.noreply.github.com>",
   "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": true,
-  "group-pull-request-title-pattern": "chore: release flagd family",
   "plugins": [
     {
       "type": "cargo-workspace",
-      "merge": true
+      "merge": false
     }
   ],
   "packages": {
-    "crates/flagd": {},
-    "crates/flagd-evaluation-engine": {},
-    "crates/ofrep": {}
+    "crates/env-var": {},
+    "crates/flagsmith": {},
+    "crates/flipt": {}
   },
   "changelog-sections": [
     {

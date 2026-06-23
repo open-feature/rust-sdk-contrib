@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  release-please:
+  release-please-flagd-family:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -30,10 +30,10 @@ jobs:
       release_created: ${{ steps.release.outputs.releases_created }}
       paths_released: ${{ steps.release.outputs.paths_released }}
 
-  cargo-publish:
-    needs: release-please
+  cargo-publish-flagd-family:
+    needs: release-please-flagd-family
     runs-on: ubuntu-latest
-    if: ${{ fromJSON(needs.release-please.outputs.release_created || false) }}
+    if: ${{ fromJSON(needs['release-please-flagd-family'].outputs.release_created || false) }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
@@ -53,7 +53,7 @@ jobs:
       - name: Publish released crates
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-          PATHS_RELEASED: ${{ needs.release-please.outputs.paths_released }}
+          PATHS_RELEASED: ${{ needs['release-please-flagd-family'].outputs.paths_released }}
         run: |
           publish_if_released() {
             crate_path="$1"
@@ -77,6 +77,45 @@ jobs:
           publish_if_released crates/flagd-evaluation-engine
           publish_if_released crates/ofrep
           publish_if_released crates/flagd
-          publish_if_released crates/env-var
-          publish_if_released crates/flipt
-          publish_if_released crates/flagsmith
+
+  release-please-independent-providers:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7
+        id: release
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_ACTION_TOKEN }}
+          config-file: release-please-independent-providers-config.json
+          manifest-file: .release-please-manifest-independent-providers.json
+      - name: Dump Release Please Output
+        env:
+          RELEASE_PLEASE_OUTPUT: ${{ toJson(steps.release.outputs) }}
+        run: |
+          echo "$RELEASE_PLEASE_OUTPUT"
+    outputs:
+      release_created: ${{ steps.release.outputs.releases_created }}
+      paths_released: ${{ steps.release.outputs.paths_released }}
+
+  cargo-publish-independent-providers:
+    needs: release-please-independent-providers
+    runs-on: ubuntu-latest
+    if: ${{ fromJSON(needs['release-please-independent-providers'].outputs.release_created || false) }}
+    strategy:
+      matrix:
+        path: ${{ fromJSON(needs['release-please-independent-providers'].outputs.paths_released || '[]') }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+
+      - name: Install Rust
+        run: rustup update --no-self-update stable && rustup default stable
+
+      - name: Setup cache
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4
+
+      - name: Publish
+        run: cargo publish --manifest-path "${{ matrix.path }}/Cargo.toml"
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
