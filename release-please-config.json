@@ -1,5 +1,4 @@
 {
-  "separate-pull-requests": true,
   "release-type": "rust",
   "signoff": "OpenFeature Bot <109696520+openfeaturebot@users.noreply.github.com>",
   "bump-minor-pre-major": true,
