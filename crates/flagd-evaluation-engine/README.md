@@ -26,7 +26,6 @@ use open_feature::EvaluationContext;
 fn main() {
     // Create the operator for evaluating targeting rules
     let operator = Operator::new();
-
     // Create evaluation context
     let context = EvaluationContext::default()
         .with_targeting_key("user-123")
@@ -38,7 +37,6 @@ fn main() {
         r#"{"if": [{"==": [{"var": "tier"}, "premium"]}, "gold", "silver"]}"#,
         &context,
     );
-
     println!("Result: {:?}", result);
 }
 ```
