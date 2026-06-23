@@ -3,6 +3,6 @@
   "crates/flagd": "0.1.0",
   "crates/flagsmith": "0.1.0",
   "crates/flipt": "0.1.0",
-  "crates/ofrep": "0.0.4",
+  "crates/ofrep": "0.1.0",
   "crates/flagd-evaluation-engine": "0.0.1"
 }
