@@ -12,7 +12,7 @@ rust-version = "1.85.1"
 [dev-dependencies]
 wiremock = "0.6.5"
 test-log = { version = "0.2", features = ["trace"] }
-serial_test = "3.2.0"
+serial_test = "3.5.0"
 
 [dependencies]
 async-trait = { workspace = true }

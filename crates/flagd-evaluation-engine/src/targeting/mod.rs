@@ -1,5 +1,5 @@
 use crate::error::FlagdEvaluationError;
-use datalogic_rs::DataLogic;
+use datalogic_rs::Engine;
 use open_feature::{EvaluationContext, EvaluationContextFieldValue};
 use serde_json::Value;
 use std::sync::Arc;
@@ -16,7 +16,7 @@ use semver::SemVerOperator;
 /// - `fractional`: Consistent hashing for percentage-based rollouts
 /// - `sem_ver`: Semantic version comparison
 pub struct Operator {
-    logic: Arc<DataLogic>,
+    logic: Arc<Engine>,
 }
 
 impl Default for Operator {
@@ -27,12 +27,10 @@ impl Default for Operator {
 
 impl Operator {
     pub fn new() -> Self {
-        // Create a new DataLogic instance
-        let mut logic = DataLogic::new();
-
-        // Register custom operators
-        logic.add_operator("fractional".to_string(), Box::new(FractionalOperator));
-        logic.add_operator("sem_ver".to_string(), Box::new(SemVerOperator));
+        let logic = Engine::builder()
+            .add_operator("fractional", FractionalOperator)
+            .add_operator("sem_ver", SemVerOperator)
+            .build();
 
         Operator {
             logic: Arc::new(logic),
@@ -45,22 +43,20 @@ impl Operator {
         targeting_rule: &str,
         ctx: &EvaluationContext,
     ) -> Result<Option<String>, FlagdEvaluationError> {
-        // Parse the rule from JSON string
-        let rule_value: Value = serde_json::from_str(targeting_rule)?;
-
         // Compile the logic
-        let compiled = self.logic.compile(&rule_value).map_err(|e| {
+        let compiled = self.logic.compile(targeting_rule).map_err(|e| {
             FlagdEvaluationError::Provider(format!("Failed to compile targeting rule: {:?}", e))
         })?;
 
         // Build context data as serde_json::Value
-        let context_data = Arc::new(self.build_context(flag_key, ctx));
+        let context_data = self.build_context(flag_key, ctx);
 
-        // Evaluate using DataLogic
-        match self.logic.evaluate(&compiled, context_data) {
+        // Evaluate using datalogic-rs
+        let mut session = self.logic.session();
+        match session.eval_str(&compiled, &context_data.to_string()) {
             Ok(result) => {
                 // Convert result to Option<String>
-                match result {
+                match serde_json::from_str::<Value>(&result)? {
                     Value::String(s) => Ok(Some(s)),
                     Value::Null => Ok(None),
                     _ => Ok(Some(result.to_string())),
@@ -339,6 +335,23 @@ mod tests {
 
         let result = operator.apply("test-flag", rule, &ctx).unwrap();
         assert_eq!(result, Some("silver".to_string()));
+    }
+
+    #[test]
+    fn test_apply_targeting_rule_with_string_operator() {
+        let operator = Operator::new();
+        let ctx = EvaluationContext::default().with_custom_field("email", "employee@company.com");
+
+        let rule = r#"{
+            "if": [
+                {"ends_with": [{"var": "email"}, "@company.com"]},
+                "internal",
+                "external"
+            ]
+        }"#;
+
+        let result = operator.apply("test-flag", rule, &ctx).unwrap();
+        assert_eq!(result, Some("internal".to_string()));
     }
 
     #[test]
