@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.3](https://github.com/open-feature/rust-sdk-contrib/compare/flagd-evaluation-engine-v0.0.2...flagd-evaluation-engine-v0.0.3) (2026-06-24)
+
+
+### 🧹 Chore
+
+* **deps:** upgrade Rust workspace dependencies ([#144](https://github.com/open-feature/rust-sdk-contrib/issues/144)) ([863cd71](https://github.com/open-feature/rust-sdk-contrib/commit/863cd710921689b2efbc44f6c3a973baf95358da))
+
 ## [0.0.2](https://github.com/open-feature/rust-sdk-contrib/compare/flagd-evaluation-engine-v0.0.1...flagd-evaluation-engine-v0.0.2) (2026-06-23)
 
 
