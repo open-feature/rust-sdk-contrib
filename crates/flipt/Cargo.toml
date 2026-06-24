@@ -6,14 +6,14 @@ edition = "2024"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-flipt = "=1.4.0"
-open-feature = "0.3.0"
+flipt = "=1.1.1"
+open-feature = "0.2.7"
 serde_json = "1.0"
 # FIXME: openfeature-rust-sdk-contrib should export this
 async-trait = "0.1"
 # FIXME: flipt-server-side-sdk should export this
-url = "2.5.8"
+url = "2.5.7"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
-mockito = "1.7.2"
+mockito = "1.7.1"
