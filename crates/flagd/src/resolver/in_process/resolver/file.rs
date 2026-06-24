@@ -7,7 +7,11 @@ use async_trait::async_trait;
 use flagd_evaluation_engine::FlagdEvaluationError;
 use flagd_evaluation_engine::model::value_converter::ValueConverter;
 use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
-use open_feature::{EvaluationContext, EvaluationError, EvaluationErrorCode, StructValue, Value};
+use open_feature::{
+    EvaluationContext, EvaluationError, EvaluationErrorCode, FlagMetadata, FlagMetadataValue,
+    StructValue, Value,
+};
+use serde_json::Value as JsonValue;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::debug;
@@ -119,6 +123,8 @@ impl FileResolver {
                 .build());
         }
 
+        let flag_metadata = resolve_metadata(&query_result.flag_set_metadata, &flag.metadata);
+
         let (variant, reason) = if flag.get_targeting() == "{}" {
             (flag.default_variant, open_feature::EvaluationReason::Static)
         } else {
@@ -168,7 +174,7 @@ impl FileResolver {
             value,
             variant: Some(variant),
             reason: Some(reason),
-            flag_metadata: None,
+            flag_metadata,
         })
     }
 }
@@ -186,6 +192,46 @@ fn targeting_evaluation_error(error: FlagdEvaluationError) -> EvaluationError {
         .code(code)
         .message(message)
         .build()
+}
+
+fn resolve_metadata(
+    flag_set_metadata: &std::collections::HashMap<String, JsonValue>,
+    flag_metadata: &std::collections::HashMap<String, JsonValue>,
+) -> Option<FlagMetadata> {
+    let mut metadata = FlagMetadata::default();
+
+    for (key, value) in flag_set_metadata {
+        if let Some(value) = metadata_value(value) {
+            metadata.add_value(key.clone(), value);
+        }
+    }
+
+    for (key, value) in flag_metadata {
+        if let Some(value) = metadata_value(value) {
+            metadata.add_value(key.clone(), value);
+        }
+    }
+
+    if metadata.values.is_empty() {
+        None
+    } else {
+        Some(metadata)
+    }
+}
+
+fn metadata_value(value: &JsonValue) -> Option<FlagMetadataValue> {
+    match value {
+        JsonValue::Bool(value) => Some(FlagMetadataValue::Bool(*value)),
+        JsonValue::Number(value) => {
+            if let Some(value) = value.as_i64() {
+                Some(FlagMetadataValue::Int(value))
+            } else {
+                value.as_f64().map(FlagMetadataValue::Float)
+            }
+        }
+        JsonValue::String(value) => Some(FlagMetadataValue::String(value.clone())),
+        _ => None,
+    }
 }
 
 #[async_trait]
