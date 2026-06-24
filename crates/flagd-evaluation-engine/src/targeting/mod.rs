@@ -338,6 +338,23 @@ mod tests {
     }
 
     #[test]
+    fn test_apply_targeting_rule_with_string_operator() {
+        let operator = Operator::new();
+        let ctx = EvaluationContext::default().with_custom_field("email", "employee@company.com");
+
+        let rule = r#"{
+            "if": [
+                {"ends_with": [{"var": "email"}, "@company.com"]},
+                "internal",
+                "external"
+            ]
+        }"#;
+
+        let result = operator.apply("test-flag", rule, &ctx).unwrap();
+        assert_eq!(result, Some("internal".to_string()));
+    }
+
+    #[test]
     fn test_apply_empty_targeting_returns_none() {
         let operator = Operator::new();
         let ctx = EvaluationContext::default();
