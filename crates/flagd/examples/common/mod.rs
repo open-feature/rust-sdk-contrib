@@ -20,7 +20,7 @@ pub async fn start_flagd_sync(
         flags_file
     );
 
-    let container = GenericImage::new("ghcr.io/open-feature/flagd", "latest")
+    let container = GenericImage::new("ghcr.io/open-feature/flagd", "v0.16.0")
         .with_exposed_port(ContainerPort::Tcp(FLAGD_SYNC_PORT))
         .with_wait_for(WaitFor::Log(LogWaitStrategy::new(
             LogSource::StdErr,

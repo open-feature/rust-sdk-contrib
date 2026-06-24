@@ -225,7 +225,7 @@ use async_trait::async_trait;
 #[cfg(feature = "rpc")]
 use open_feature::EvaluationContextFieldValue;
 use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
-use open_feature::{EvaluationContext, EvaluationError, StructValue, Value};
+use open_feature::{EvaluationContext, EvaluationError, EvaluationReason, StructValue, Value};
 #[cfg(feature = "rest")]
 use resolver::rest::RestResolver;
 use tracing::debug;
@@ -450,7 +450,36 @@ pub struct FlagdProvider {
     /// The underlying feature flag resolver
     provider: Arc<dyn FeatureProvider + Send + Sync>,
     /// Optional caching layer
-    cache: Option<Arc<CacheService<Value>>>,
+    cache: Option<Arc<CacheService<CachedResolution>>>,
+}
+
+#[derive(Clone, Debug)]
+struct CachedResolution {
+    value: Value,
+    variant: Option<String>,
+    flag_metadata: Option<open_feature::FlagMetadata>,
+}
+
+impl CachedResolution {
+    fn from_resolution<T>(value: Value, result: &ResolutionDetails<T>) -> Self {
+        Self {
+            value,
+            variant: result.variant.clone(),
+            flag_metadata: result.flag_metadata.clone(),
+        }
+    }
+
+    fn into_resolution<T>(
+        self,
+        value_converter: impl Fn(Value) -> Option<T>,
+    ) -> Option<ResolutionDetails<T>> {
+        value_converter(self.value).map(|value| ResolutionDetails {
+            value,
+            variant: self.variant,
+            reason: Some(EvaluationReason::Cached),
+            flag_metadata: self.flag_metadata,
+        })
+    }
 }
 
 impl FlagdProvider {
@@ -585,11 +614,11 @@ impl FlagdProvider {
         flag_key: &str,
         context: &EvaluationContext,
         value_converter: impl Fn(Value) -> Option<T>,
-    ) -> Option<T> {
+    ) -> Option<ResolutionDetails<T>> {
         if let Some(cache) = &self.cache
             && let Some(cached_value) = cache.get(flag_key, context).await
         {
-            return value_converter(cached_value);
+            return cached_value.into_resolution(value_converter);
         }
         None
     }
@@ -606,21 +635,25 @@ impl FeatureProvider for FlagdProvider {
         flag_key: &str,
         context: &EvaluationContext,
     ) -> Result<ResolutionDetails<bool>, EvaluationError> {
-        if let Some(value) = self
+        if let Some(result) = self
             .get_cached_value(flag_key, context, |v| match v {
                 Value::Bool(b) => Some(b),
                 _ => None,
             })
             .await
         {
-            return Ok(ResolutionDetails::new(value));
+            return Ok(result);
         }
 
         let result = self.provider.resolve_bool_value(flag_key, context).await?;
 
         if let Some(cache) = &self.cache {
             cache
-                .add(flag_key, context, Value::Bool(result.value))
+                .add(
+                    flag_key,
+                    context,
+                    CachedResolution::from_resolution(Value::Bool(result.value), &result),
+                )
                 .await;
         }
 
@@ -632,20 +665,26 @@ impl FeatureProvider for FlagdProvider {
         flag_key: &str,
         context: &EvaluationContext,
     ) -> Result<ResolutionDetails<i64>, EvaluationError> {
-        if let Some(value) = self
+        if let Some(result) = self
             .get_cached_value(flag_key, context, |v| match v {
                 Value::Int(i) => Some(i),
                 _ => None,
             })
             .await
         {
-            return Ok(ResolutionDetails::new(value));
+            return Ok(result);
         }
 
         let result = self.provider.resolve_int_value(flag_key, context).await?;
 
         if let Some(cache) = &self.cache {
-            cache.add(flag_key, context, Value::Int(result.value)).await;
+            cache
+                .add(
+                    flag_key,
+                    context,
+                    CachedResolution::from_resolution(Value::Int(result.value), &result),
+                )
+                .await;
         }
 
         Ok(result)
@@ -656,21 +695,25 @@ impl FeatureProvider for FlagdProvider {
         flag_key: &str,
         context: &EvaluationContext,
     ) -> Result<ResolutionDetails<f64>, EvaluationError> {
-        if let Some(value) = self
+        if let Some(result) = self
             .get_cached_value(flag_key, context, |v| match v {
                 Value::Float(f) => Some(f),
                 _ => None,
             })
             .await
         {
-            return Ok(ResolutionDetails::new(value));
+            return Ok(result);
         }
 
         let result = self.provider.resolve_float_value(flag_key, context).await?;
 
         if let Some(cache) = &self.cache {
             cache
-                .add(flag_key, context, Value::Float(result.value))
+                .add(
+                    flag_key,
+                    context,
+                    CachedResolution::from_resolution(Value::Float(result.value), &result),
+                )
                 .await;
         }
 
@@ -682,14 +725,14 @@ impl FeatureProvider for FlagdProvider {
         flag_key: &str,
         context: &EvaluationContext,
     ) -> Result<ResolutionDetails<String>, EvaluationError> {
-        if let Some(value) = self
+        if let Some(result) = self
             .get_cached_value(flag_key, context, |v| match v {
                 Value::String(s) => Some(s),
                 _ => None,
             })
             .await
         {
-            return Ok(ResolutionDetails::new(value));
+            return Ok(result);
         }
 
         let result = self
@@ -699,7 +742,11 @@ impl FeatureProvider for FlagdProvider {
 
         if let Some(cache) = &self.cache {
             cache
-                .add(flag_key, context, Value::String(result.value.clone()))
+                .add(
+                    flag_key,
+                    context,
+                    CachedResolution::from_resolution(Value::String(result.value.clone()), &result),
+                )
                 .await;
         }
 
@@ -711,14 +758,14 @@ impl FeatureProvider for FlagdProvider {
         flag_key: &str,
         context: &EvaluationContext,
     ) -> Result<ResolutionDetails<StructValue>, EvaluationError> {
-        if let Some(value) = self
+        if let Some(result) = self
             .get_cached_value(flag_key, context, |v| match v {
                 Value::Struct(s) => Some(s),
                 _ => None,
             })
             .await
         {
-            return Ok(ResolutionDetails::new(value));
+            return Ok(result);
         }
 
         let result = self
@@ -728,7 +775,11 @@ impl FeatureProvider for FlagdProvider {
 
         if let Some(cache) = &self.cache {
             cache
-                .add(flag_key, context, Value::Struct(result.value.clone()))
+                .add(
+                    flag_key,
+                    context,
+                    CachedResolution::from_resolution(Value::Struct(result.value.clone()), &result),
+                )
                 .await;
         }
 

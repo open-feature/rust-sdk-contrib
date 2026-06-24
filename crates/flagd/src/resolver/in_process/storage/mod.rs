@@ -53,11 +53,14 @@ pub struct StorageQueryResult {
     pub feature_flag: Option<FeatureFlag>,
     /// Metadata associated with the flag set
     pub flag_set_metadata: HashMap<String, serde_json::Value>,
+    /// Static context associated with the sync payload
+    pub sync_metadata: HashMap<String, serde_json::Value>,
 }
 
 pub struct FlagStore {
     flags: Arc<RwLock<HashMap<String, FeatureFlag>>>,
     flag_set_metadata: Arc<RwLock<HashMap<String, serde_json::Value>>>,
+    sync_metadata: Arc<RwLock<HashMap<String, serde_json::Value>>>,
     state_sender: Sender<StorageStateChange>,
     connector: Arc<dyn Connector>,
     shutdown: Arc<AtomicBool>,
@@ -71,6 +74,7 @@ impl FlagStore {
             Self {
                 flags: Arc::new(RwLock::new(HashMap::new())),
                 flag_set_metadata: Arc::new(RwLock::new(HashMap::new())),
+                sync_metadata: Arc::new(RwLock::new(HashMap::new())),
                 state_sender,
                 connector,
                 shutdown: Arc::new(AtomicBool::new(false)),
@@ -100,10 +104,13 @@ impl FlagStore {
                             let parsing_result = FlagParser::parse_string(&payload.flag_data)?;
                             let mut flags_write = self.flags.write().await;
                             let mut metadata_write = self.flag_set_metadata.write().await;
+                            let mut sync_metadata_write = self.sync_metadata.write().await;
                             let flag_keys: Vec<String> =
                                 parsing_result.flags.keys().cloned().collect();
+                            let sync_metadata = payload.metadata.unwrap_or_default();
                             *flags_write = parsing_result.flags;
                             *metadata_write = parsing_result.flag_set_metadata;
+                            *sync_metadata_write = sync_metadata.clone();
                             debug!("Successfully parsed {} flags", flags_write.len());
 
                             // Send initial state change so FileResolver knows init completed
@@ -112,7 +119,7 @@ impl FlagStore {
                                 .send(StorageStateChange {
                                     storage_state: StorageState::Ok,
                                     changed_flags_keys: flag_keys,
-                                    sync_metadata: payload.metadata.unwrap_or_default(),
+                                    sync_metadata,
                                 })
                                 .await;
                         }
@@ -148,10 +155,12 @@ impl FlagStore {
     pub async fn get_flag(&self, key: &str) -> StorageQueryResult {
         let flags = self.flags.read().await;
         let metadata = self.flag_set_metadata.read().await;
+        let sync_metadata = self.sync_metadata.read().await;
 
         StorageQueryResult {
             feature_flag: flags.get(key).cloned(),
             flag_set_metadata: metadata.clone(),
+            sync_metadata: sync_metadata.clone(),
         }
     }
 
@@ -188,6 +197,7 @@ impl FlagStore {
     async fn start_stream_listener(&self) {
         let flags = self.flags.clone();
         let metadata = self.flag_set_metadata.clone();
+        let sync_metadata = self.sync_metadata.clone();
         let sender = self.state_sender.clone();
         let stream = self.connector.get_stream();
         let shutdown = self.shutdown.clone();
@@ -207,6 +217,7 @@ impl FlagStore {
                                 Ok(parsing_result) => {
                                     let mut flags_write = flags.write().await;
                                     let mut metadata_write = metadata.write().await;
+                                    let mut sync_metadata_write = sync_metadata.write().await;
 
                                     // Compute changed flags before updating
                                     let changed_keys = Self::compute_changed_flags(
@@ -215,8 +226,11 @@ impl FlagStore {
                                     );
 
                                     let num_changes = changed_keys.len();
+                                    let payload_sync_metadata =
+                                        payload.metadata.unwrap_or_default();
                                     *flags_write = parsing_result.flags;
                                     *metadata_write = parsing_result.flag_set_metadata;
+                                    *sync_metadata_write = payload_sync_metadata.clone();
 
                                     debug!(
                                         "Flag store updated: {} flags changed ({} total flags)",
@@ -228,7 +242,7 @@ impl FlagStore {
                                         .send(StorageStateChange {
                                             storage_state: StorageState::Ok,
                                             changed_flags_keys: changed_keys,
-                                            sync_metadata: payload.metadata.unwrap_or_default(),
+                                            sync_metadata: payload_sync_metadata,
                                         })
                                         .await;
                                 }

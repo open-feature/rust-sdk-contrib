@@ -8,8 +8,8 @@ use flagd_evaluation_engine::FlagdEvaluationError;
 use flagd_evaluation_engine::model::value_converter::ValueConverter;
 use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
 use open_feature::{
-    EvaluationContext, EvaluationError, EvaluationErrorCode, FlagMetadata, FlagMetadataValue,
-    StructValue, Value,
+    EvaluationContext, EvaluationContextFieldValue, EvaluationError, EvaluationErrorCode,
+    FlagMetadata, FlagMetadataValue, StructValue, Value,
 };
 use serde_json::Value as JsonValue;
 use std::sync::Arc;
@@ -105,6 +105,7 @@ impl FileResolver {
         }
 
         let query_result = self.store.get_flag(flag_key).await;
+        let enriched_context = enrich_context(context, &query_result.sync_metadata);
 
         let flag = match query_result.feature_flag {
             Some(flag) => flag,
@@ -130,7 +131,7 @@ impl FileResolver {
         } else {
             match self
                 .operator
-                .apply(flag_key, &flag.get_targeting(), context)
+                .apply(flag_key, &flag.get_targeting(), &enriched_context)
                 .map_err(targeting_evaluation_error)?
             {
                 Some(variant) => (variant, open_feature::EvaluationReason::TargetingMatch),
@@ -192,6 +193,39 @@ fn targeting_evaluation_error(error: FlagdEvaluationError) -> EvaluationError {
         .code(code)
         .message(message)
         .build()
+}
+
+fn enrich_context(
+    context: &EvaluationContext,
+    sync_metadata: &std::collections::HashMap<String, JsonValue>,
+) -> EvaluationContext {
+    let mut enriched = context.clone();
+
+    for (key, value) in sync_metadata {
+        if enriched.custom_fields.contains_key(key) {
+            continue;
+        }
+        if let Some(value) = context_field_value(value) {
+            enriched.add_custom_field(key.clone(), value);
+        }
+    }
+
+    enriched
+}
+
+fn context_field_value(value: &JsonValue) -> Option<EvaluationContextFieldValue> {
+    match value {
+        JsonValue::Bool(value) => Some(EvaluationContextFieldValue::Bool(*value)),
+        JsonValue::Number(value) => {
+            if let Some(value) = value.as_i64() {
+                Some(EvaluationContextFieldValue::Int(value))
+            } else {
+                value.as_f64().map(EvaluationContextFieldValue::Float)
+            }
+        }
+        JsonValue::String(value) => Some(EvaluationContextFieldValue::String(value.clone())),
+        _ => None,
+    }
 }
 
 fn resolve_metadata(

@@ -285,7 +285,7 @@ impl Image for Flagd {
     }
 
     fn tag(&self) -> &str {
-        "latest"
+        "v0.16.0"
     }
 
     fn cmd(&self) -> impl IntoIterator<Item = impl Into<Cow<'_, str>>> {
