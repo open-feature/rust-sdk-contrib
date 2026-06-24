@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.1](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagd-v0.2.0...open-feature-flagd-v0.2.1) (2026-06-24)
+
+
+### 🧹 Chore
+
+* **deps:** upgrade Rust workspace dependencies ([#144](https://github.com/open-feature/rust-sdk-contrib/issues/144)) ([863cd71](https://github.com/open-feature/rust-sdk-contrib/commit/863cd710921689b2efbc44f6c3a973baf95358da))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * flagd-evaluation-engine bumped from 0.0.2 to 0.0.3
+    * open-feature-ofrep bumped from 0.1.0 to 0.1.1
+
 ## [0.2.0](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagd-v0.1.0...open-feature-flagd-v0.2.0) (2026-06-23)
 
 

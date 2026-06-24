@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-ofrep-v0.1.0...open-feature-ofrep-v0.1.1) (2026-06-24)
+
+
+### 🧹 Chore
+
+* **deps:** upgrade Rust workspace dependencies ([#144](https://github.com/open-feature/rust-sdk-contrib/issues/144)) ([863cd71](https://github.com/open-feature/rust-sdk-contrib/commit/863cd710921689b2efbc44f6c3a973baf95358da))
+
 ## [0.1.0](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-ofrep-v0.0.4...open-feature-ofrep-v0.1.0) (2026-06-23)
 
 
