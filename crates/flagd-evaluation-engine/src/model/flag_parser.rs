@@ -8,7 +8,9 @@ pub struct FlagParser;
 
 impl FlagParser {
     pub fn parse_string(configuration: &str) -> Result<ParsingResult, FlagdEvaluationError> {
-        let value: Value = serde_json::from_str(configuration)?;
+        let mut value: Value = serde_json::from_str(configuration)?;
+        Self::transpose_evaluator_refs(&mut value)?;
+
         let obj = value
             .as_object()
             .ok_or_else(|| FlagdEvaluationError::Parse("Invalid JSON structure".to_string()))?;
@@ -40,7 +42,130 @@ impl FlagParser {
         })
     }
 
+    fn transpose_evaluator_refs(configuration: &mut Value) -> Result<(), FlagdEvaluationError> {
+        let evaluators = configuration
+            .get("$evaluators")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+
+        Self::resolve_refs(configuration, &evaluators, &mut Vec::new())
+    }
+
+    fn resolve_refs(
+        value: &mut Value,
+        evaluators: &Map<String, Value>,
+        stack: &mut Vec<String>,
+    ) -> Result<(), FlagdEvaluationError> {
+        match value {
+            Value::Object(obj) => {
+                if obj.len() == 1 {
+                    if let Some(ref_name) = obj.get("$ref").and_then(Value::as_str) {
+                        if stack.iter().any(|name| name == ref_name) {
+                            return Err(FlagdEvaluationError::Parse(format!(
+                                "Circular evaluator reference detected: {}",
+                                ref_name
+                            )));
+                        }
+
+                        let mut replacement =
+                            evaluators.get(ref_name).cloned().ok_or_else(|| {
+                                FlagdEvaluationError::Parse(format!(
+                                    "Evaluator reference '{}' was not found",
+                                    ref_name
+                                ))
+                            })?;
+
+                        stack.push(ref_name.to_string());
+                        Self::resolve_refs(&mut replacement, evaluators, stack)?;
+                        stack.pop();
+
+                        *value = replacement;
+                        return Ok(());
+                    }
+                }
+
+                for child in obj.values_mut() {
+                    Self::resolve_refs(child, evaluators, stack)?;
+                }
+                Ok(())
+            }
+            Value::Array(items) => {
+                for item in items {
+                    Self::resolve_refs(item, evaluators, stack)?;
+                }
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+
     fn convert_map_to_hashmap(map: &Map<String, Value>) -> HashMap<String, serde_json::Value> {
         map.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn parse_string_transposes_evaluator_refs() {
+        let config = r#"{
+            "$evaluators": {
+                "emailSuffix": { "ends_with": [{ "var": "email" }, "@example.com"] }
+            },
+            "flags": {
+                "my-flag": {
+                    "state": "ENABLED",
+                    "variants": {
+                        "variant-a": "a",
+                        "variant-b": "b"
+                    },
+                    "defaultVariant": "variant-b",
+                    "targeting": {
+                        "if": [{ "$ref": "emailSuffix" }, "variant-a", "variant-b"]
+                    }
+                }
+            }
+        }"#;
+
+        let result = FlagParser::parse_string(config).unwrap();
+        let flag = result.flags.get("my-flag").unwrap();
+
+        assert_eq!(
+            flag.targeting.as_ref().unwrap(),
+            &json!({
+                "if": [
+                    { "ends_with": [{ "var": "email" }, "@example.com"] },
+                    "variant-a",
+                    "variant-b"
+                ]
+            })
+        );
+    }
+
+    #[test]
+    fn parse_string_rejects_missing_evaluator_refs() {
+        let config = r#"{
+            "flags": {
+                "my-flag": {
+                    "state": "ENABLED",
+                    "variants": {
+                        "variant-a": "a",
+                        "variant-b": "b"
+                    },
+                    "defaultVariant": "variant-b",
+                    "targeting": {
+                        "if": [{ "$ref": "emailSuffix" }, "variant-a", "variant-b"]
+                    }
+                }
+            }
+        }"#;
+
+        let result = FlagParser::parse_string(config);
+
+        assert!(result.is_err());
     }
 }

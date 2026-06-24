@@ -1,5 +1,8 @@
 use crate::error::FlagdEvaluationError;
 use datalogic_rs::Engine;
+use datalogic_rs::bumpalo::Bump;
+use datalogic_rs::operator::EvalContext;
+use datalogic_rs::{ArenaExt, CustomOperator, DataValue};
 use open_feature::{EvaluationContext, EvaluationContextFieldValue};
 use serde_json::Value;
 use std::sync::Arc;
@@ -30,6 +33,8 @@ impl Operator {
         let logic = Engine::builder()
             .add_operator("fractional", FractionalOperator)
             .add_operator("sem_ver", SemVerOperator)
+            .add_operator("flagd_starts_with", StartsWithOperator)
+            .add_operator("flagd_ends_with", EndsWithOperator)
             .build();
 
         Operator {
@@ -43,9 +48,9 @@ impl Operator {
         targeting_rule: &str,
         ctx: &EvaluationContext,
     ) -> Result<Option<String>, FlagdEvaluationError> {
-        // Compile the logic
-        let compiled = self.logic.compile(targeting_rule).map_err(|e| {
-            FlagdEvaluationError::Provider(format!("Failed to compile targeting rule: {:?}", e))
+        let targeting_rule = Self::normalize_targeting_rule(targeting_rule)?;
+        let compiled = self.logic.compile(&targeting_rule).map_err(|e| {
+            FlagdEvaluationError::Parse(format!("Failed to compile targeting rule: {:?}", e))
         })?;
 
         // Build context data as serde_json::Value
@@ -63,10 +68,40 @@ impl Operator {
                 }
             }
             Err(e) => {
-                // Log and return None on error
                 tracing::debug!("DataLogic evaluation error: {:?}", e);
-                Ok(None)
+                Err(FlagdEvaluationError::Parse(format!(
+                    "Failed to evaluate targeting rule: {:?}",
+                    e
+                )))
             }
+        }
+    }
+
+    fn normalize_targeting_rule(targeting_rule: &str) -> Result<String, FlagdEvaluationError> {
+        let mut value: Value = serde_json::from_str(targeting_rule)?;
+        Self::rename_string_operators(&mut value);
+        serde_json::to_string(&value).map_err(FlagdEvaluationError::from)
+    }
+
+    fn rename_string_operators(value: &mut Value) {
+        match value {
+            Value::Object(map) => {
+                if let Some(rule) = map.remove("starts_with") {
+                    map.insert("flagd_starts_with".to_string(), rule);
+                }
+                if let Some(rule) = map.remove("ends_with") {
+                    map.insert("flagd_ends_with".to_string(), rule);
+                }
+                for value in map.values_mut() {
+                    Self::rename_string_operators(value);
+                }
+            }
+            Value::Array(items) => {
+                for value in items {
+                    Self::rename_string_operators(value);
+                }
+            }
+            _ => {}
         }
     }
 
@@ -163,6 +198,42 @@ impl Operator {
                     .collect(),
             ),
         }
+    }
+}
+
+struct StartsWithOperator;
+struct EndsWithOperator;
+
+impl CustomOperator for StartsWithOperator {
+    fn evaluate<'a>(
+        &self,
+        args: &[&'a DataValue<'a>],
+        _context: &mut EvalContext<'_, 'a>,
+        arena: &'a Bump,
+    ) -> datalogic_rs::Result<&'a DataValue<'a>> {
+        Ok(arena.bool(string_op(args, |text, pattern| text.starts_with(pattern))))
+    }
+}
+
+impl CustomOperator for EndsWithOperator {
+    fn evaluate<'a>(
+        &self,
+        args: &[&'a DataValue<'a>],
+        _context: &mut EvalContext<'_, 'a>,
+        arena: &'a Bump,
+    ) -> datalogic_rs::Result<&'a DataValue<'a>> {
+        Ok(arena.bool(string_op(args, |text, pattern| text.ends_with(pattern))))
+    }
+}
+
+fn string_op(args: &[&DataValue<'_>], op: impl Fn(&str, &str) -> bool) -> bool {
+    let [text, pattern, ..] = args else {
+        return false;
+    };
+
+    match (text.as_str(), pattern.as_str()) {
+        (Some(text), Some(pattern)) => op(text, pattern),
+        _ => false,
     }
 }
 

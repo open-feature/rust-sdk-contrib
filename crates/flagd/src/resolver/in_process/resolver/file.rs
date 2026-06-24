@@ -4,6 +4,7 @@ use crate::resolver::in_process::targeting::Operator;
 use crate::resolver::in_process::{FlagStore, StorageState, StorageStateChange};
 use crate::{CacheService, CacheSettings};
 use async_trait::async_trait;
+use flagd_evaluation_engine::FlagdEvaluationError;
 use flagd_evaluation_engine::model::value_converter::ValueConverter;
 use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
 use open_feature::{EvaluationContext, EvaluationError, EvaluationErrorCode, StructValue, Value};
@@ -118,55 +119,73 @@ impl FileResolver {
                 .build());
         }
 
-        let variant = if flag.get_targeting() == "{}" {
-            flag.default_variant
+        let (variant, reason) = if flag.get_targeting() == "{}" {
+            (flag.default_variant, open_feature::EvaluationReason::Static)
         } else {
             match self
                 .operator
                 .apply(flag_key, &flag.get_targeting(), context)
-                .map_err(|e| {
-                    EvaluationError::builder()
-                        .code(EvaluationErrorCode::General(e.to_string()))
-                        .message(e.to_string())
-                        .build()
-                })? {
-                Some(variant) => variant,
-                None => flag.default_variant,
+                .map_err(targeting_evaluation_error)?
+            {
+                Some(variant) => (variant, open_feature::EvaluationReason::TargetingMatch),
+                None => (
+                    flag.default_variant,
+                    open_feature::EvaluationReason::Default,
+                ),
             }
         };
 
-        let value = flag
-            .variants
-            .get(&variant)
-            .and_then(value_converter)
-            .ok_or_else(|| {
-                EvaluationError::builder()
-                    .code(EvaluationErrorCode::TypeMismatch)
-                    .message(format!(
-                        "Value for flag {} is not a {}",
-                        flag_key, type_name
-                    ))
-                    .build()
-            })?;
+        let variant_value = flag.variants.get(&variant).ok_or_else(|| {
+            EvaluationError::builder()
+                .code(EvaluationErrorCode::General(format!(
+                    "Variant {} for flag {} was not found",
+                    variant, flag_key
+                )))
+                .message(format!(
+                    "Variant {} for flag {} was not found",
+                    variant, flag_key
+                ))
+                .build()
+        })?;
+
+        let value = value_converter(variant_value).ok_or_else(|| {
+            EvaluationError::builder()
+                .code(EvaluationErrorCode::TypeMismatch)
+                .message(format!(
+                    "Value for flag {} is not a {}",
+                    flag_key, type_name
+                ))
+                .build()
+        })?;
 
         if let Some(cache) = &self.cache {
-            let cache_value = flag
-                .variants
-                .get(&variant)
-                .map(|v| Value::String(v.to_string()));
-
-            if let Some(v) = cache_value {
-                let _ = cache.add(flag_key, context, v).await;
-            }
+            let _ = cache
+                .add(flag_key, context, Value::String(variant_value.to_string()))
+                .await;
         }
 
         Ok(ResolutionDetails {
             value,
             variant: Some(variant),
-            reason: Some(open_feature::EvaluationReason::TargetingMatch),
+            reason: Some(reason),
             flag_metadata: None,
         })
     }
+}
+
+fn targeting_evaluation_error(error: FlagdEvaluationError) -> EvaluationError {
+    let message = error.to_string();
+    let code = match error {
+        FlagdEvaluationError::Parse(_) | FlagdEvaluationError::Json(_) => {
+            EvaluationErrorCode::ParseError
+        }
+        _ => EvaluationErrorCode::General(message.clone()),
+    };
+
+    EvaluationError::builder()
+        .code(code)
+        .message(message)
+        .build()
 }
 
 #[async_trait]

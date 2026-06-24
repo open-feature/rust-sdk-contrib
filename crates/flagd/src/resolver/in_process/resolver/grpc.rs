@@ -3,6 +3,7 @@ use crate::resolver::common::upstream::UpstreamConfig;
 use crate::resolver::in_process::targeting::Operator;
 use crate::{CacheService, FlagdOptions};
 use async_trait::async_trait;
+use flagd_evaluation_engine::FlagdEvaluationError;
 use open_feature::Value as OpenFeatureValue;
 use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
 use open_feature::{EvaluationContext, EvaluationError, EvaluationErrorCode, StructValue, Value};
@@ -204,43 +205,51 @@ impl InProcessResolver {
                 .build());
         }
 
-        let variant = if flag.get_targeting() == "{}" {
-            flag.default_variant
+        let (variant, reason) = if flag.get_targeting() == "{}" {
+            (flag.default_variant, open_feature::EvaluationReason::Static)
         } else {
             match self
                 .operator
                 .apply(flag_key, &flag.get_targeting(), context)
-                .map_err(|e| {
-                    EvaluationError::builder()
-                        .code(EvaluationErrorCode::General(e.to_string()))
-                        .message(e.to_string())
-                        .build()
-                })? {
-                Some(variant) => variant,
-                None => flag.default_variant,
+                .map_err(targeting_evaluation_error)?
+            {
+                Some(variant) => (variant, open_feature::EvaluationReason::TargetingMatch),
+                None => (
+                    flag.default_variant,
+                    open_feature::EvaluationReason::Default,
+                ),
             }
         };
 
-        let value = flag
-            .variants
-            .get(&variant)
-            .and_then(value_converter)
-            .ok_or_else(|| {
-                EvaluationError::builder()
-                    .code(EvaluationErrorCode::TypeMismatch)
-                    .message(format!(
-                        "Value for flag {} is not a {}",
-                        flag_key, type_name
-                    ))
-                    .build()
-            })?;
+        let variant_value = flag.variants.get(&variant).ok_or_else(|| {
+            EvaluationError::builder()
+                .code(EvaluationErrorCode::General(format!(
+                    "Variant {} for flag {} was not found",
+                    variant, flag_key
+                )))
+                .message(format!(
+                    "Variant {} for flag {} was not found",
+                    variant, flag_key
+                ))
+                .build()
+        })?;
+
+        let value = value_converter(variant_value).ok_or_else(|| {
+            EvaluationError::builder()
+                .code(EvaluationErrorCode::TypeMismatch)
+                .message(format!(
+                    "Value for flag {} is not a {}",
+                    flag_key, type_name
+                ))
+                .build()
+        })?;
 
         // Cache the result based on the type
         if let Some(cache) = &self.cache {
-            let cache_value = match flag.variants.get(&variant) {
-                Some(JsonValue::Bool(b)) => OpenFeatureValue::Bool(*b),
-                Some(JsonValue::String(s)) => OpenFeatureValue::String(s.clone()),
-                Some(JsonValue::Number(n)) => {
+            let cache_value = match variant_value {
+                JsonValue::Bool(b) => OpenFeatureValue::Bool(*b),
+                JsonValue::String(s) => OpenFeatureValue::String(s.clone()),
+                JsonValue::Number(n) => {
                     if n.is_i64() {
                         OpenFeatureValue::Int(n.as_i64().unwrap())
                     } else {
@@ -251,7 +260,7 @@ impl InProcessResolver {
                     return Ok(ResolutionDetails {
                         value,
                         variant: Some(variant),
-                        reason: Some(open_feature::EvaluationReason::TargetingMatch),
+                        reason: Some(reason),
                         flag_metadata: None,
                     });
                 }
@@ -262,10 +271,25 @@ impl InProcessResolver {
         Ok(ResolutionDetails {
             value,
             variant: Some(variant),
-            reason: Some(open_feature::EvaluationReason::TargetingMatch),
+            reason: Some(reason),
             flag_metadata: None,
         })
     }
+}
+
+fn targeting_evaluation_error(error: FlagdEvaluationError) -> EvaluationError {
+    let message = error.to_string();
+    let code = match error {
+        FlagdEvaluationError::Parse(_) | FlagdEvaluationError::Json(_) => {
+            EvaluationErrorCode::ParseError
+        }
+        _ => EvaluationErrorCode::General(message.clone()),
+    };
+
+    EvaluationError::builder()
+        .code(code)
+        .message(message)
+        .build()
 }
 
 #[async_trait]
