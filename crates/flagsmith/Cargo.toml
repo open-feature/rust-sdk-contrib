@@ -13,7 +13,7 @@ keywords = ["openfeature", "feature-flags", "flagsmith"]
 
 [dependencies]
 # OpenFeature SDK
-open-feature = "0.2"
+open-feature = "0.3"
 
 # Flagsmith SDK
 flagsmith = "2.1"
@@ -23,7 +23,7 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 async-trait = "0.1"
 
 # Error handling
-thiserror = "1.0"
+thiserror = "2.0"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -39,7 +39,7 @@ url = "2.5"
 reqwest = { version = "0.11", default-features = false }
 
 # Flagsmith flag engine types (must match flagsmith version)
-flagsmith-flag-engine = "0.5"
+flagsmith-flag-engine = "0.5.1"
 
 [dev-dependencies]
 # Testing

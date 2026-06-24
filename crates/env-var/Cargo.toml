@@ -14,15 +14,15 @@ keywords = ["open-feature", "feature-flag", "environment-variable"]
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-open-feature = "0.2.7"
+open-feature = "0.3.0"
 async-trait = "0.1.89"
 
 [dev-dependencies]
-tokio = { version = "1.48.0", features = ["full"] }
-cucumber = "0.22.0"
-futures = "0.3.31"
-test-with = { version = "0.15", features = ["runtime"] }
-libtest-with = { version = "0.8.1-12" }
+tokio = { version = "1.52.3", features = ["full"] }
+cucumber = "0.23.0"
+futures = "0.3.32"
+test-with = { version = "0.16", features = ["runtime"] }
+libtest-with = { version = "0.8.1-14" }
 temp-env = "0.3"
 
 [[test]]

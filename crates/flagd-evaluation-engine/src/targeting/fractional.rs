@@ -1,34 +1,34 @@
-use datalogic_rs::{ContextStack, Evaluator, Operator};
+use datalogic_rs::bumpalo::Bump;
+use datalogic_rs::operator::EvalContext;
+use datalogic_rs::{ArenaExt, CustomOperator, DataValue};
 use murmurhash3::murmurhash3_x86_32;
-use serde_json::Value;
 use tracing::debug;
 
 pub struct FractionalOperator;
 
-impl Operator for FractionalOperator {
-    fn evaluate(
+impl CustomOperator for FractionalOperator {
+    fn evaluate<'a>(
         &self,
-        args: &[Value],
-        context: &mut ContextStack,
-        _evaluator: &dyn Evaluator,
-    ) -> datalogic_rs::Result<Value> {
+        args: &[&'a DataValue<'a>],
+        context: &mut EvalContext<'_, 'a>,
+        arena: &'a Bump,
+    ) -> datalogic_rs::Result<&'a DataValue<'a>> {
         if args.is_empty() {
             debug!("No arguments provided for fractional targeting.");
-            return Ok(Value::Null);
+            return Ok(arena.null());
         }
 
         // Get the current data from context (root contains the data)
-        let frame = context.root();
-        let data = frame.data();
+        let data = context.root_input();
 
         // If the first element is a simple string, use it as the bucketing expression and use remaining elements as buckets.
         // Otherwise, compute the bucketing key from provided data and treat the whole array as bucket definitions.
-        let (bucket_by, distributions) = match &args[0] {
-            Value::String(s) => {
+        let (bucket_by, distributions) = match args[0].as_str() {
+            Some(s) => {
                 debug!("Using explicit bucketing expression: {:?}", s);
-                (s.clone(), &args[1..])
+                (s.to_string(), &args[1..])
             }
-            _ => {
+            None => {
                 // Extract targeting key from context if available
                 let targeting_key = data
                     .get("targetingKey")
@@ -52,13 +52,13 @@ impl Operator for FractionalOperator {
 
         if distributions.is_empty() {
             debug!("No bucket definitions provided.");
-            return Ok(Value::Null);
+            return Ok(arena.null());
         }
 
         let mut total_weight = 0;
         let mut buckets = Vec::new();
         for dist in distributions {
-            if let Value::Array(arr) = dist {
+            if let Some(arr) = dist.as_array() {
                 if arr.len() >= 2 {
                     let variant = arr[0].as_str().unwrap_or("").to_string();
                     let weight = arr[1].as_i64().unwrap_or(1) as i32;
@@ -94,11 +94,11 @@ impl Operator for FractionalOperator {
                     "Selected variant: {} for bucket value {:.4}",
                     variant, bucket
                 );
-                return Ok(Value::String(variant));
+                return Ok(arena.string(&variant));
             }
         }
 
         debug!("No bucket matched for bucket value: {:.4}", bucket);
-        Ok(Value::Null)
+        Ok(arena.null())
     }
 }

@@ -21,7 +21,7 @@ members = [
 
 [workspace.dependencies]
 # Core evaluation
-datalogic-rs = "4.0.4"
+datalogic-rs = "5.0.0"
 murmurhash3 = "0.0.5"
 semver = "1.0"
 
@@ -36,11 +36,11 @@ tracing = "0.1"
 thiserror = "2.0"
 
 # OpenFeature SDK
-open-feature = "0.2"
+open-feature = "0.3"
 
 # Async runtime
 async-trait = "0.1"
-tokio = { version = "1.48", features = ["sync", "time", "fs", "rt", "rt-multi-thread", "macros", "net"] }
+tokio = { version = "1.52", features = ["sync", "time", "fs", "rt", "rt-multi-thread", "macros", "net"] }
 
 # File watching
 notify = "8.2"
@@ -55,7 +55,7 @@ prost-types = "0.14"
 # HTTP
 hyper-util = { version = "0.1", features = ["tokio"] }
 tower = { version = "0.5", default-features = false, features = ["util"] }
-reqwest = { version = "0.13.1", default-features = false, features = ["json", "stream", "rustls"] }
+reqwest = { version = "0.13.4", default-features = false, features = ["json", "stream", "rustls"] }
 
 # OFREP specific
 url = "2.5"
