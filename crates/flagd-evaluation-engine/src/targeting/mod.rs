@@ -422,4 +422,29 @@ mod tests {
         let result = operator.apply("test-flag", rule, &ctx).unwrap();
         assert_eq!(result, None);
     }
+
+    #[test]
+    fn test_apply_substring_operators_with_numeric_pattern() {
+        let operator = Operator::new();
+        let ctx = EvaluationContext::default().with_custom_field("id", "3");
+
+        let rule = r#"{
+            "if": [
+                {"starts_with": [{"var": "id"}, "abc"]},
+                "prefix",
+                {"if": [
+                    {"ends_with": [{"var": "id"}, "xyz"]},
+                    "postfix",
+                    {"if": [
+                        {"ends_with": [{"var": "id"}, 3]},
+                        "fail",
+                        "none"
+                    ]}
+                ]}
+            ]
+        }"#;
+
+        let result = operator.apply("test-flag", rule, &ctx).unwrap();
+        assert_eq!(result, Some("none".to_string()));
+    }
 }

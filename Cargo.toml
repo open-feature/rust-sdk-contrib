@@ -21,7 +21,7 @@ members = [
 
 [workspace.dependencies]
 # Core evaluation
-datalogic-rs = { version = "5.0.0", features = ["ext-string"] }
+datalogic-rs = { version = "5.0.0" }
 murmurhash3 = "0.0.5"
 semver = "1.0"
 
