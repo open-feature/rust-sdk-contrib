@@ -490,48 +490,6 @@ fn should_cache<T>(result: &ResolutionDetails<T>) -> bool {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn cache_policy_only_allows_static_results() {
-        let cases = [
-            ("static enum", Some(EvaluationReason::Static), true),
-            (
-                "static extension",
-                Some(EvaluationReason::Other("STATIC".to_string())),
-                true,
-            ),
-            (
-                "static extension lowercase",
-                Some(EvaluationReason::Other("static".to_string())),
-                true,
-            ),
-            (
-                "targeting match",
-                Some(EvaluationReason::TargetingMatch),
-                false,
-            ),
-            ("default", Some(EvaluationReason::Default), false),
-            ("error", Some(EvaluationReason::Error), false),
-            ("cached", Some(EvaluationReason::Cached), false),
-            ("missing reason", None, false),
-        ];
-
-        for (name, reason, expected) in cases {
-            let result = ResolutionDetails {
-                value: true,
-                variant: None,
-                reason,
-                flag_metadata: None,
-            };
-
-            assert_eq!(should_cache(&result), expected, "{name}");
-        }
-    }
-}
-
 impl FlagdProvider {
     #[instrument(skip(options))]
     pub async fn new(options: FlagdOptions) -> Result<Self, FlagdError> {
@@ -824,5 +782,47 @@ impl FeatureProvider for FlagdProvider {
         .await;
 
         Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cache_policy_only_allows_static_results() {
+        let cases = [
+            ("static enum", Some(EvaluationReason::Static), true),
+            (
+                "static extension",
+                Some(EvaluationReason::Other("STATIC".to_string())),
+                true,
+            ),
+            (
+                "static extension lowercase",
+                Some(EvaluationReason::Other("static".to_string())),
+                true,
+            ),
+            (
+                "targeting match",
+                Some(EvaluationReason::TargetingMatch),
+                false,
+            ),
+            ("default", Some(EvaluationReason::Default), false),
+            ("error", Some(EvaluationReason::Error), false),
+            ("cached", Some(EvaluationReason::Cached), false),
+            ("missing reason", None, false),
+        ];
+
+        for (name, reason, expected) in cases {
+            let result = ResolutionDetails {
+                value: true,
+                variant: None,
+                reason,
+                flag_metadata: None,
+            };
+
+            assert_eq!(should_cache(&result), expected, "{name}");
+        }
     }
 }

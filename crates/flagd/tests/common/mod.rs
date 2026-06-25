@@ -121,6 +121,8 @@ pub const ENVOY_PORT: u16 = 9211;
 pub const FLAGD_PORT: u16 = 8013;
 pub const FLAGD_SYNC_PORT: u16 = 8015;
 pub const FLAGD_OFREP_PORT: u16 = 8016;
+pub const FLAGD_IMAGE: &str = "ghcr.io/open-feature/flagd";
+pub const FLAGD_IMAGE_TAG: &str = "v0.16.0";
 
 #[derive(Debug, Clone)]
 pub struct ConfigFile {
@@ -281,11 +283,11 @@ impl Flagd {
 
 impl Image for Flagd {
     fn name(&self) -> &str {
-        "ghcr.io/open-feature/flagd"
+        FLAGD_IMAGE
     }
 
     fn tag(&self) -> &str {
-        "v0.16.0"
+        FLAGD_IMAGE_TAG
     }
 
     fn cmd(&self) -> impl IntoIterator<Item = impl Into<Cow<'_, str>>> {

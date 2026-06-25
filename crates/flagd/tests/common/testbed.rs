@@ -9,7 +9,7 @@ use testcontainers::core::{ContainerPort, Image, Mount, WaitFor};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, ImageExt};
 
-use crate::common::{ConfigFile, ENVOY_CONFIG, ENVOY_PORT, Envoy};
+use crate::common::{ConfigFile, ENVOY_CONFIG, ENVOY_PORT, Envoy, FLAGD_IMAGE, FLAGD_IMAGE_TAG};
 
 const RPC_PORT: u16 = 8013;
 const SYNC_PORT: u16 = 8015;
@@ -80,11 +80,11 @@ impl TestbedFlagd {
 
 impl Image for TestbedFlagd {
     fn name(&self) -> &str {
-        "ghcr.io/open-feature/flagd"
+        FLAGD_IMAGE
     }
 
     fn tag(&self) -> &str {
-        "v0.16.0"
+        FLAGD_IMAGE_TAG
     }
 
     fn cmd(&self) -> impl IntoIterator<Item = impl Into<Cow<'_, str>>> {

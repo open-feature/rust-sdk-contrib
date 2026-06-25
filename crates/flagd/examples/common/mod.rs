@@ -8,6 +8,8 @@ use testcontainers::{
 };
 
 pub const FLAGD_SYNC_PORT: u16 = 8015;
+pub const FLAGD_IMAGE: &str = "ghcr.io/open-feature/flagd";
+pub const FLAGD_IMAGE_TAG: &str = "v0.16.0";
 
 /// Start a flagd container configured for in-process sync (port 8015)
 pub async fn start_flagd_sync(
@@ -20,7 +22,7 @@ pub async fn start_flagd_sync(
         flags_file
     );
 
-    let container = GenericImage::new("ghcr.io/open-feature/flagd", "v0.16.0")
+    let container = GenericImage::new(FLAGD_IMAGE, FLAGD_IMAGE_TAG)
         .with_exposed_port(ContainerPort::Tcp(FLAGD_SYNC_PORT))
         .with_wait_for(WaitFor::Log(LogWaitStrategy::new(
             LogSource::StdErr,

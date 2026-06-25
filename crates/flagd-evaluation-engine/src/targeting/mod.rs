@@ -33,8 +33,8 @@ impl Operator {
         let logic = Engine::builder()
             .add_operator("fractional", FractionalOperator)
             .add_operator("sem_ver", SemVerOperator)
-            .add_operator("flagd_starts_with", StartsWithOperator)
-            .add_operator("flagd_ends_with", EndsWithOperator)
+            .add_operator("starts_with", StartsWithOperator)
+            .add_operator("ends_with", EndsWithOperator)
             .build();
 
         Operator {
@@ -78,31 +78,8 @@ impl Operator {
     }
 
     fn normalize_targeting_rule(targeting_rule: &str) -> Result<String, FlagdEvaluationError> {
-        let mut value: Value = serde_json::from_str(targeting_rule)?;
-        Self::rename_string_operators(&mut value);
+        let value: Value = serde_json::from_str(targeting_rule)?;
         serde_json::to_string(&value).map_err(FlagdEvaluationError::from)
-    }
-
-    fn rename_string_operators(value: &mut Value) {
-        match value {
-            Value::Object(map) => {
-                if let Some(rule) = map.remove("starts_with") {
-                    map.insert("flagd_starts_with".to_string(), rule);
-                }
-                if let Some(rule) = map.remove("ends_with") {
-                    map.insert("flagd_ends_with".to_string(), rule);
-                }
-                for value in map.values_mut() {
-                    Self::rename_string_operators(value);
-                }
-            }
-            Value::Array(items) => {
-                for value in items {
-                    Self::rename_string_operators(value);
-                }
-            }
-            _ => {}
-        }
     }
 
     fn build_context(&self, flag_key: &str, ctx: &EvaluationContext) -> Value {
@@ -409,11 +386,11 @@ mod tests {
     }
 
     #[test]
-    fn test_apply_targeting_rule_with_string_operator() {
+    fn test_apply_targeting_rule_with_string_operators() {
         let operator = Operator::new();
         let ctx = EvaluationContext::default().with_custom_field("email", "employee@company.com");
 
-        let rule = r#"{
+        let ends_with_rule = r#"{
             "if": [
                 {"ends_with": [{"var": "email"}, "@company.com"]},
                 "internal",
@@ -421,7 +398,18 @@ mod tests {
             ]
         }"#;
 
-        let result = operator.apply("test-flag", rule, &ctx).unwrap();
+        let result = operator.apply("test-flag", ends_with_rule, &ctx).unwrap();
+        assert_eq!(result, Some("internal".to_string()));
+
+        let starts_with_rule = r#"{
+            "if": [
+                {"starts_with": [{"var": "email"}, "employee@"]},
+                "internal",
+                "external"
+            ]
+        }"#;
+
+        let result = operator.apply("test-flag", starts_with_rule, &ctx).unwrap();
         assert_eq!(result, Some("internal".to_string()));
     }
 
