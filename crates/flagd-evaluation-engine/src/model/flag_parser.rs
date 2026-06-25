@@ -59,8 +59,8 @@ impl FlagParser {
     ) -> Result<(), FlagdEvaluationError> {
         match value {
             Value::Object(obj) => {
-                if obj.len() == 1 {
-                    if let Some(ref_name) = obj.get("$ref").and_then(Value::as_str) {
+                if obj.len() == 1
+                    && let Some(ref_name) = obj.get("$ref").and_then(Value::as_str) {
                         if stack.iter().any(|name| name == ref_name) {
                             return Err(FlagdEvaluationError::Parse(format!(
                                 "Circular evaluator reference detected: {}",
@@ -83,7 +83,6 @@ impl FlagParser {
                         *value = replacement;
                         return Ok(());
                     }
-                }
 
                 for child in obj.values_mut() {
                     Self::resolve_refs(child, evaluators, stack)?;
