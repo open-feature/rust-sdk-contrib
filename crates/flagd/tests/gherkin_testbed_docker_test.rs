@@ -5,6 +5,7 @@ use open_feature_flagd::{CacheSettings, CacheType, FlagdOptions, FlagdProvider, 
 use test_log::test;
 
 mod common;
+#[path = "common/testbed.rs"]
 mod testbed;
 
 #[derive(Debug, World)]

@@ -236,9 +236,11 @@ fn testbed_flagd_config(sync_metadata: SyncMetadata) -> String {
 
 fn testbed_flags() -> String {
     let mut testing_flags: serde_json::Value =
-        serde_json::from_str(include_str!("../flagd-testbed/flags/testing-flags.json")).unwrap();
-    let metadata_flags: serde_json::Value =
-        serde_json::from_str(include_str!("../flagd-testbed/flags/metadata-flags.json")).unwrap();
+        serde_json::from_str(include_str!("../../flagd-testbed/flags/testing-flags.json")).unwrap();
+    let metadata_flags: serde_json::Value = serde_json::from_str(include_str!(
+        "../../flagd-testbed/flags/metadata-flags.json"
+    ))
+    .unwrap();
 
     let testing_flags_map = testing_flags["flags"].as_object_mut().unwrap();
     testing_flags_map.extend(metadata_flags["flags"].as_object().unwrap().clone());
