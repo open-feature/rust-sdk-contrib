@@ -131,6 +131,7 @@ async fn create_file_provider(world: &mut MetadataWorld, config: String) {
     world.options.resolver_type = ResolverType::File;
     world.options.cache_settings = None;
     world.options.source_configuration = Some(config_file.path().to_string_lossy().into_owned());
+    world.options.selector = world.selector.clone();
     world.provider = Some(
         FlagdProvider::new(world.options.clone())
             .await

@@ -211,31 +211,24 @@ fn struct_value_to_json(value: &StructValue) -> serde_json::Value {
     let map = value
         .fields
         .iter()
-        .map(|(key, value)| {
-            let value = match value {
-                open_feature::Value::Bool(value) => serde_json::Value::Bool(*value),
-                open_feature::Value::String(value) => serde_json::Value::String(value.clone()),
-                open_feature::Value::Int(value) => serde_json::Value::Number((*value).into()),
-                open_feature::Value::Float(value) => serde_json::Number::from_f64(*value)
-                    .map(serde_json::Value::Number)
-                    .unwrap_or(serde_json::Value::Null),
-                open_feature::Value::Struct(value) => struct_value_to_json(value),
-                open_feature::Value::Array(values) => serde_json::Value::Array(
-                    values
-                        .iter()
-                        .map(|value| match value {
-                            open_feature::Value::String(value) => {
-                                serde_json::Value::String(value.clone())
-                            }
-                            _ => serde_json::Value::String(format!("{value:?}")),
-                        })
-                        .collect(),
-                ),
-            };
-            (key.clone(), value)
-        })
+        .map(|(key, value)| (key.clone(), value_to_json(value)))
         .collect();
     serde_json::Value::Object(map)
+}
+
+fn value_to_json(value: &open_feature::Value) -> serde_json::Value {
+    match value {
+        open_feature::Value::Bool(value) => serde_json::Value::Bool(*value),
+        open_feature::Value::String(value) => serde_json::Value::String(value.clone()),
+        open_feature::Value::Int(value) => serde_json::Value::Number((*value).into()),
+        open_feature::Value::Float(value) => serde_json::Number::from_f64(*value)
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Null),
+        open_feature::Value::Struct(value) => struct_value_to_json(value),
+        open_feature::Value::Array(values) => {
+            serde_json::Value::Array(values.iter().map(value_to_json).collect())
+        }
+    }
 }
 
 #[then(expr = r#"the resolved details value should be {string}"#)]

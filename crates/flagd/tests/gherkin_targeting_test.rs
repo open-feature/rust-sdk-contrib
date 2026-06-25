@@ -254,7 +254,14 @@ async fn context_with_nested_property(
     inner_key: String,
     value: String,
 ) {
-    let mut fields = HashMap::new();
+    let mut fields = match world.context.custom_fields.get(&outer_key) {
+        Some(EvaluationContextFieldValue::Struct(existing)) => existing
+            .clone()
+            .downcast::<StructValue>()
+            .map(|existing| existing.fields.clone())
+            .unwrap_or_default(),
+        _ => HashMap::new(),
+    };
     fields.insert(inner_key, open_feature::Value::String(value));
     world.context = world.context.clone().with_custom_field(
         outer_key,

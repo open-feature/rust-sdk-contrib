@@ -49,7 +49,20 @@ impl FlagParser {
             .cloned()
             .unwrap_or_default();
 
-        Self::resolve_refs(configuration, &evaluators, &mut Vec::new())
+        let Some(flags) = configuration
+            .get_mut("flags")
+            .and_then(Value::as_object_mut)
+        else {
+            return Ok(());
+        };
+
+        for flag in flags.values_mut() {
+            if let Some(targeting) = flag.get_mut("targeting") {
+                Self::resolve_refs(targeting, &evaluators, &mut Vec::new())?;
+            }
+        }
+
+        Ok(())
     }
 
     fn resolve_refs(
@@ -60,29 +73,29 @@ impl FlagParser {
         match value {
             Value::Object(obj) => {
                 if obj.len() == 1
-                    && let Some(ref_name) = obj.get("$ref").and_then(Value::as_str) {
-                        if stack.iter().any(|name| name == ref_name) {
-                            return Err(FlagdEvaluationError::Parse(format!(
-                                "Circular evaluator reference detected: {}",
-                                ref_name
-                            )));
-                        }
-
-                        let mut replacement =
-                            evaluators.get(ref_name).cloned().ok_or_else(|| {
-                                FlagdEvaluationError::Parse(format!(
-                                    "Evaluator reference '{}' was not found",
-                                    ref_name
-                                ))
-                            })?;
-
-                        stack.push(ref_name.to_string());
-                        Self::resolve_refs(&mut replacement, evaluators, stack)?;
-                        stack.pop();
-
-                        *value = replacement;
-                        return Ok(());
+                    && let Some(ref_name) = obj.get("$ref").and_then(Value::as_str)
+                {
+                    if stack.iter().any(|name| name == ref_name) {
+                        return Err(FlagdEvaluationError::Parse(format!(
+                            "Circular evaluator reference detected: {}",
+                            ref_name
+                        )));
                     }
+
+                    let mut replacement = evaluators.get(ref_name).cloned().ok_or_else(|| {
+                        FlagdEvaluationError::Parse(format!(
+                            "Evaluator reference '{}' was not found",
+                            ref_name
+                        ))
+                    })?;
+
+                    stack.push(ref_name.to_string());
+                    Self::resolve_refs(&mut replacement, evaluators, stack)?;
+                    stack.pop();
+
+                    *value = replacement;
+                    return Ok(());
+                }
 
                 for child in obj.values_mut() {
                     Self::resolve_refs(child, evaluators, stack)?;
@@ -166,5 +179,53 @@ mod tests {
         let result = FlagParser::parse_string(config);
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_string_only_transposes_refs_in_targeting_rules() {
+        let config = r#"{
+            "$evaluators": {
+                "emailSuffix": { "ends_with": [{ "var": "email" }, "@example.com"] }
+            },
+            "flags": {
+                "my-flag": {
+                    "state": "ENABLED",
+                    "variants": {
+                        "variant-a": { "$ref": "external-id" },
+                        "variant-b": "b"
+                    },
+                    "defaultVariant": "variant-b",
+                    "metadata": {
+                        "owner": { "$ref": "external-owner" }
+                    },
+                    "targeting": {
+                        "if": [{ "$ref": "emailSuffix" }, "variant-a", "variant-b"]
+                    }
+                }
+            },
+            "metadata": {
+                "source": { "$ref": "external-source" }
+            }
+        }"#;
+
+        let result = FlagParser::parse_string(config).unwrap();
+        let flag = result.flags.get("my-flag").unwrap();
+
+        assert_eq!(flag.variants["variant-a"], json!({ "$ref": "external-id" }));
+        assert_eq!(flag.metadata["owner"], json!({ "$ref": "external-owner" }));
+        assert_eq!(
+            result.flag_set_metadata["source"],
+            json!({ "$ref": "external-source" })
+        );
+        assert_eq!(
+            flag.targeting.as_ref().unwrap(),
+            &json!({
+                "if": [
+                    { "ends_with": [{ "var": "email" }, "@example.com"] },
+                    "variant-a",
+                    "variant-b"
+                ]
+            })
+        );
     }
 }
