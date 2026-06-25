@@ -482,6 +482,56 @@ impl CachedResolution {
     }
 }
 
+fn should_cache<T>(result: &ResolutionDetails<T>) -> bool {
+    match result.reason.as_ref() {
+        Some(EvaluationReason::Static) => true,
+        Some(EvaluationReason::Other(reason)) => reason.eq_ignore_ascii_case("STATIC"),
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cache_policy_only_allows_static_results() {
+        let cases = [
+            ("static enum", Some(EvaluationReason::Static), true),
+            (
+                "static extension",
+                Some(EvaluationReason::Other("STATIC".to_string())),
+                true,
+            ),
+            (
+                "static extension lowercase",
+                Some(EvaluationReason::Other("static".to_string())),
+                true,
+            ),
+            (
+                "targeting match",
+                Some(EvaluationReason::TargetingMatch),
+                false,
+            ),
+            ("default", Some(EvaluationReason::Default), false),
+            ("error", Some(EvaluationReason::Error), false),
+            ("cached", Some(EvaluationReason::Cached), false),
+            ("missing reason", None, false),
+        ];
+
+        for (name, reason, expected) in cases {
+            let result = ResolutionDetails {
+                value: true,
+                variant: None,
+                reason,
+                flag_metadata: None,
+            };
+
+            assert_eq!(should_cache(&result), expected, "{name}");
+        }
+    }
+}
+
 impl FlagdProvider {
     #[instrument(skip(options))]
     pub async fn new(options: FlagdOptions) -> Result<Self, FlagdError> {
@@ -622,6 +672,26 @@ impl FlagdProvider {
         }
         None
     }
+
+    async fn cache_value<T>(
+        &self,
+        flag_key: &str,
+        context: &EvaluationContext,
+        value: Value,
+        result: &ResolutionDetails<T>,
+    ) {
+        if let Some(cache) = &self.cache
+            && should_cache(result)
+        {
+            cache
+                .add(
+                    flag_key,
+                    context,
+                    CachedResolution::from_resolution(value, result),
+                )
+                .await;
+        }
+    }
 }
 
 #[async_trait]
@@ -646,16 +716,8 @@ impl FeatureProvider for FlagdProvider {
         }
 
         let result = self.provider.resolve_bool_value(flag_key, context).await?;
-
-        if let Some(cache) = &self.cache {
-            cache
-                .add(
-                    flag_key,
-                    context,
-                    CachedResolution::from_resolution(Value::Bool(result.value), &result),
-                )
-                .await;
-        }
+        self.cache_value(flag_key, context, Value::Bool(result.value), &result)
+            .await;
 
         Ok(result)
     }
@@ -676,16 +738,8 @@ impl FeatureProvider for FlagdProvider {
         }
 
         let result = self.provider.resolve_int_value(flag_key, context).await?;
-
-        if let Some(cache) = &self.cache {
-            cache
-                .add(
-                    flag_key,
-                    context,
-                    CachedResolution::from_resolution(Value::Int(result.value), &result),
-                )
-                .await;
-        }
+        self.cache_value(flag_key, context, Value::Int(result.value), &result)
+            .await;
 
         Ok(result)
     }
@@ -706,16 +760,8 @@ impl FeatureProvider for FlagdProvider {
         }
 
         let result = self.provider.resolve_float_value(flag_key, context).await?;
-
-        if let Some(cache) = &self.cache {
-            cache
-                .add(
-                    flag_key,
-                    context,
-                    CachedResolution::from_resolution(Value::Float(result.value), &result),
-                )
-                .await;
-        }
+        self.cache_value(flag_key, context, Value::Float(result.value), &result)
+            .await;
 
         Ok(result)
     }
@@ -739,16 +785,13 @@ impl FeatureProvider for FlagdProvider {
             .provider
             .resolve_string_value(flag_key, context)
             .await?;
-
-        if let Some(cache) = &self.cache {
-            cache
-                .add(
-                    flag_key,
-                    context,
-                    CachedResolution::from_resolution(Value::String(result.value.clone()), &result),
-                )
-                .await;
-        }
+        self.cache_value(
+            flag_key,
+            context,
+            Value::String(result.value.clone()),
+            &result,
+        )
+        .await;
 
         Ok(result)
     }
@@ -772,16 +815,13 @@ impl FeatureProvider for FlagdProvider {
             .provider
             .resolve_struct_value(flag_key, context)
             .await?;
-
-        if let Some(cache) = &self.cache {
-            cache
-                .add(
-                    flag_key,
-                    context,
-                    CachedResolution::from_resolution(Value::Struct(result.value.clone()), &result),
-                )
-                .await;
-        }
+        self.cache_value(
+            flag_key,
+            context,
+            Value::Struct(result.value.clone()),
+            &result,
+        )
+        .await;
 
         Ok(result)
     }

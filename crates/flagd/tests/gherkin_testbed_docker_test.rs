@@ -1,30 +1,17 @@
-use std::borrow::Cow;
-use std::sync::Arc;
-
-use common::ConfigFile;
 use cucumber::{World, given, then, when};
 use open_feature::provider::FeatureProvider;
 use open_feature::{EvaluationContext, EvaluationReason, StructValue};
 use open_feature_flagd::{CacheSettings, CacheType, FlagdOptions, FlagdProvider, ResolverType};
 use test_log::test;
-use testcontainers::ContainerAsync;
-use testcontainers::core::logs::LogSource;
-use testcontainers::core::wait::LogWaitStrategy;
-use testcontainers::core::{ContainerPort, Image, Mount, WaitFor};
-use testcontainers::runners::AsyncRunner;
 
 mod common;
-
-const RPC_PORT: u16 = 8013;
-const SYNC_PORT: u16 = 8015;
-const OFREP_PORT: u16 = 8016;
-const TESTBED_CONTEXT_VALUE: &str = r#"{"injectedmetadata":"set"}"#;
+mod testbed;
 
 #[derive(Debug, World)]
 #[world(init = Self::new)]
 struct TestbedWorld {
     options: FlagdOptions,
-    container: Option<ContainerAsync<TestbedFlagd>>,
+    runtime: Option<testbed::RunningTestbed>,
     provider: Option<FlagdProvider>,
     flag_key: String,
     flag_type: String,
@@ -39,7 +26,7 @@ impl TestbedWorld {
     fn new() -> Self {
         Self {
             options: FlagdOptions::default(),
-            container: None,
+            runtime: None,
             provider: None,
             flag_key: String::new(),
             flag_type: String::new(),
@@ -53,7 +40,7 @@ impl TestbedWorld {
 
     async fn clear(&mut self) {
         self.provider = None;
-        self.container = None;
+        self.runtime = None;
         self.options = FlagdOptions::default();
         self.flag_key.clear();
         self.flag_type.clear();
@@ -71,108 +58,6 @@ impl Default for TestbedWorld {
     }
 }
 
-#[derive(Debug, Clone)]
-struct TestbedFlagd {
-    _flags_file: Arc<ConfigFile>,
-    _config_file: Arc<ConfigFile>,
-    mounts: Vec<Mount>,
-    cmd: Vec<String>,
-    exposed_ports: Vec<ContainerPort>,
-}
-
-impl TestbedFlagd {
-    fn new(disable_sync_metadata: bool) -> Self {
-        let flags_file = Arc::new(ConfigFile::new(testbed_flags()));
-        let config_file = Arc::new(ConfigFile::new(testbed_flagd_config(disable_sync_metadata)));
-        let mounts = vec![
-            Mount::bind_mount(flags_file.path(), "/etc/flagd/flags.json".to_string()),
-            Mount::bind_mount(config_file.path(), "/etc/flagd/config.json".to_string()),
-        ];
-
-        Self {
-            _flags_file: flags_file,
-            _config_file: config_file,
-            mounts,
-            cmd: vec![
-                "start".to_string(),
-                "--config".to_string(),
-                "/etc/flagd/config.json".to_string(),
-            ],
-            exposed_ports: vec![
-                ContainerPort::Tcp(RPC_PORT),
-                ContainerPort::Tcp(SYNC_PORT),
-                ContainerPort::Tcp(OFREP_PORT),
-            ],
-        }
-    }
-}
-
-impl Image for TestbedFlagd {
-    fn name(&self) -> &str {
-        "ghcr.io/open-feature/flagd"
-    }
-
-    fn tag(&self) -> &str {
-        "v0.16.0"
-    }
-
-    fn cmd(&self) -> impl IntoIterator<Item = impl Into<Cow<'_, str>>> {
-        self.cmd.clone()
-    }
-
-    fn ready_conditions(&self) -> Vec<WaitFor> {
-        vec![
-            WaitFor::Log(LogWaitStrategy::new(
-                LogSource::StdErr,
-                "Flag IResolver listening at [::]:8013",
-            )),
-            WaitFor::Log(LogWaitStrategy::new(
-                LogSource::StdErr,
-                "ofrep service listening at 8016",
-            )),
-            WaitFor::millis(100),
-        ]
-    }
-
-    fn expose_ports(&self) -> &[ContainerPort] {
-        &self.exposed_ports
-    }
-
-    fn mounts(&self) -> impl IntoIterator<Item = &Mount> {
-        self.mounts.iter()
-    }
-}
-
-fn testbed_flagd_config(disable_sync_metadata: bool) -> String {
-    let mut config = serde_json::json!({
-        "sources": [
-            {
-                "uri": "/etc/flagd/flags.json",
-                "provider": "file"
-            }
-        ],
-        "context-value": serde_json::from_str::<serde_json::Value>(TESTBED_CONTEXT_VALUE).unwrap()
-    });
-
-    if disable_sync_metadata {
-        config["disable-sync-metadata"] = serde_json::Value::Bool(true);
-    }
-
-    serde_json::to_string(&config).unwrap()
-}
-
-fn testbed_flags() -> String {
-    let mut testing_flags: serde_json::Value =
-        serde_json::from_str(include_str!("../flagd-testbed/flags/testing-flags.json")).unwrap();
-    let metadata_flags: serde_json::Value =
-        serde_json::from_str(include_str!("../flagd-testbed/flags/metadata-flags.json")).unwrap();
-
-    let testing_flags_map = testing_flags["flags"].as_object_mut().unwrap();
-    testing_flags_map.extend(metadata_flags["flags"].as_object().unwrap().clone());
-
-    serde_json::to_string(&testing_flags).unwrap()
-}
-
 fn reason_to_string(reason: EvaluationReason) -> String {
     match reason {
         EvaluationReason::Static => "STATIC".to_string(),
@@ -188,28 +73,27 @@ fn reason_to_string(reason: EvaluationReason) -> String {
 async fn create_provider(
     world: &mut TestbedWorld,
     resolver_type: ResolverType,
-    disable_sync_metadata: bool,
+    sync_metadata: testbed::SyncMetadata,
 ) {
-    let container = TestbedFlagd::new(disable_sync_metadata)
-        .start()
-        .await
-        .expect("failed to start flagd");
+    let requested_target_uri = world.options.target_uri.clone();
+    let (runtime, endpoint) = testbed::start_testbed(
+        requested_target_uri.as_deref(),
+        &resolver_type,
+        sync_metadata,
+    )
+    .await;
 
     world.options.host = "localhost".to_string();
-    world.options.resolver_type = resolver_type.clone();
-    world.options.port = match resolver_type {
-        ResolverType::Rpc => container.get_host_port_ipv4(RPC_PORT).await.unwrap(),
-        ResolverType::InProcess => container.get_host_port_ipv4(SYNC_PORT).await.unwrap(),
-        ResolverType::Rest => panic!("REST is not used by this runner"),
-        ResolverType::File => panic!("File is not used by this runner"),
-    };
+    world.options.resolver_type = resolver_type;
+    world.options.port = endpoint.port;
+    world.options.target_uri = endpoint.target_uri;
 
     world.provider = Some(
         FlagdProvider::new(world.options.clone())
             .await
             .expect("failed to create flagd provider"),
     );
-    world.container = Some(container);
+    world.runtime = Some(runtime);
     tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
 }
 
@@ -232,18 +116,28 @@ async fn option_with_value(
             });
         }
         "deadlineMs" => world.options.deadline_ms = value.parse().unwrap(),
+        "targetUri" => world.options.target_uri = Some(value),
         _ => {}
     }
 }
 
 #[given(expr = "a stable flagd provider")]
 async fn stable_flagd_provider(world: &mut TestbedWorld) {
-    create_provider(world, ResolverType::Rpc, false).await;
+    let resolver_type = match world.options.target_uri.as_deref() {
+        Some(target_uri) if target_uri.contains("sync.service") => ResolverType::InProcess,
+        _ => ResolverType::Rpc,
+    };
+    create_provider(world, resolver_type, testbed::SyncMetadata::Enabled).await;
 }
 
 #[given(expr = "a syncpayload flagd provider")]
 async fn syncpayload_flagd_provider(world: &mut TestbedWorld) {
-    create_provider(world, ResolverType::InProcess, true).await;
+    create_provider(
+        world,
+        ResolverType::InProcess,
+        testbed::SyncMetadata::Disabled,
+    )
+    .await;
 }
 
 #[given(regex = r#"^a ([A-Za-z]+)-flag with key "([^"]+)" and a default value "([^"]*)"$"#)]
@@ -409,11 +303,15 @@ async fn connection_stable_test() {
             })
         })
         .filter_run_and_exit(feature_path, |_feature, _rule, scenario| {
-            scenario.name == "Connection"
-                && !scenario
-                    .tags
-                    .iter()
-                    .any(|tag| matches!(tag.as_str(), "customCert" | "unixsocket" | "os.linux"))
+            matches!(
+                scenario.name.as_str(),
+                "Connection"
+                    | "Connection via TargetUri rpc"
+                    | "Connection via TargetUri in-process"
+            ) && !scenario
+                .tags
+                .iter()
+                .any(|tag| matches!(tag.as_str(), "customCert" | "unixsocket" | "os.linux"))
         })
         .await;
 }

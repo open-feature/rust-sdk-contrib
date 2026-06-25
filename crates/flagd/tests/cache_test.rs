@@ -1,12 +1,42 @@
 use common::{FLAGD_CONFIG, FLAGD_OFREP_PORT, FLAGD_PORT, FLAGD_SYNC_PORT, Flagd};
 use open_feature::provider::FeatureProvider;
-use open_feature::{EvaluationContext, Value};
+use open_feature::{EvaluationContext, EvaluationReason, Value};
 use open_feature_flagd::{CacheSettings, CacheType, FlagdOptions, FlagdProvider, ResolverType};
 use test_log::test;
 use testcontainers::runners::AsyncRunner;
 use tokio::time::Duration;
 
 mod common;
+
+const CACHE_POLICY_CONFIG: &str = r#"{
+    "$schema": "https://flagd.dev/schema/v0/flags.json",
+    "flags": {
+        "targeted-string": {
+            "state": "ENABLED",
+            "variants": {
+                "internal": "INTERNAL",
+                "external": "EXTERNAL"
+            },
+            "defaultVariant": "external",
+            "targeting": {
+                "if": [
+                    {
+                        "==": [
+                            {
+                                "var": [
+                                    "segment"
+                                ]
+                            },
+                            "internal"
+                        ]
+                    },
+                    "internal",
+                    "external"
+                ]
+            }
+        }
+    }
+}"#;
 
 #[test(tokio::test)]
 async fn test_cache_ttl_and_config_change() {
@@ -133,6 +163,46 @@ async fn test_rpc_provider_with_inmemory_cache() {
     .unwrap();
 
     verify_cache_behavior(&provider).await;
+}
+
+#[test(tokio::test)]
+async fn test_rpc_cache_ignores_targeting_match_results() {
+    let flagd = Flagd::new()
+        .with_config(CACHE_POLICY_CONFIG)
+        .start()
+        .await
+        .unwrap();
+    let port = flagd.get_host_port_ipv4(FLAGD_PORT).await.unwrap();
+
+    let provider = FlagdProvider::new(FlagdOptions {
+        host: "localhost".to_string(),
+        port,
+        resolver_type: ResolverType::Rpc,
+        cache_settings: Some(CacheSettings {
+            cache_type: CacheType::Lru,
+            max_size: 100,
+            ttl: Some(Duration::from_secs(3)),
+        }),
+        ..Default::default()
+    })
+    .await
+    .unwrap();
+
+    let context = EvaluationContext::default().with_custom_field("segment", "internal");
+
+    let first_result = provider
+        .resolve_string_value("targeted-string", &context)
+        .await
+        .unwrap();
+    assert_eq!(first_result.value, "INTERNAL");
+    assert_targeting_match(first_result.reason.as_ref());
+
+    let second_result = provider
+        .resolve_string_value("targeted-string", &context)
+        .await
+        .unwrap();
+    assert_eq!(second_result.value, "INTERNAL");
+    assert_targeting_match(second_result.reason.as_ref());
 }
 
 #[test(tokio::test)]
@@ -289,4 +359,13 @@ async fn verify_cache_behavior(provider: &FlagdProvider) {
         .await
         .unwrap();
     assert_eq!(expired_bool.value, true);
+}
+
+fn assert_targeting_match(reason: Option<&EvaluationReason>) {
+    match reason {
+        Some(EvaluationReason::TargetingMatch) => {}
+        Some(EvaluationReason::Other(reason)) if reason.eq_ignore_ascii_case("TARGETING_MATCH") => {
+        }
+        other => panic!("expected TARGETING_MATCH reason, got {other:?}"),
+    }
 }
