@@ -6,6 +6,13 @@ use tracing::debug;
 
 pub struct FractionalOperator;
 
+fn bucket_for(bucket_by: &str) -> (u32, f64) {
+    let hash = murmurhash3_x86_32(bucket_by.as_bytes(), 0);
+    let signed = hash as i32;
+    let bucket = (signed as f64).abs() / (i32::MAX as f64) * 100.0;
+    (hash, bucket)
+}
+
 impl CustomOperator for FractionalOperator {
     fn evaluate<'a>(
         &self,
@@ -59,9 +66,9 @@ impl CustomOperator for FractionalOperator {
         let mut buckets = Vec::new();
         for dist in distributions {
             if let Some(arr) = dist.as_array() {
-                if arr.len() >= 2 {
+                if !arr.is_empty() {
                     let variant = arr[0].as_str().unwrap_or("").to_string();
-                    let weight = arr[1].as_i64().unwrap_or(1) as i32;
+                    let weight = arr.get(1).and_then(|value| value.as_i64()).unwrap_or(1) as i32;
 
                     total_weight += weight;
                     buckets.push((variant.clone(), weight));
@@ -74,9 +81,12 @@ impl CustomOperator for FractionalOperator {
             }
         }
         debug!("Total weight of buckets: {}", total_weight);
+        if total_weight <= 0 {
+            debug!("No positive bucket weight provided.");
+            return Ok(arena.null());
+        }
 
-        let hash: u32 = murmurhash3_x86_32(bucket_by.as_bytes(), 0);
-        let bucket = (hash as f64 / u32::MAX as f64) * 100.0;
+        let (hash, bucket) = bucket_for(&bucket_by);
         debug!(
             "Computed hash: {}, bucket_by: {:?}, resulting bucket value: {:.4}",
             hash, bucket_by, bucket
@@ -100,5 +110,18 @@ impl CustomOperator for FractionalOperator {
 
         debug!("No bucket matched for bucket value: {:.4}", bucket);
         Ok(arena.null())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bucket_for_uses_signed_murmurhash_ratio() {
+        let (hash, bucket) = bucket_for("flag-user");
+
+        assert_eq!(hash, 2_410_693_464);
+        assert!((bucket - 87.74333786579935).abs() < 1e-9);
     }
 }
