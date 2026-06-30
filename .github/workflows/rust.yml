@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       with:
         submodules: recursive
 
@@ -33,7 +33,7 @@ jobs:
       run: rustup update --no-self-update stable && rustup default stable
 
     - name: Setup cache
-      uses: Swatinem/rust-cache@v2
+      uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4
 
     - name: Run workspace tests
       if: ${{ !startsWith(github.head_ref, 'release-please--') }}
@@ -53,7 +53,7 @@ jobs:
           fi
         done)
         if [ -n "$CRATE_DIR" ]; then
-          cargo test -p "$COMPONENT" --verbose
+          cargo test --manifest-path "$CRATE_DIR/Cargo.toml" --verbose
         else
           cargo test --workspace --verbose
         fi
@@ -62,20 +62,43 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          submodules: recursive
+
+      - name: Install protobuf compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Install Rust
+        run: rustup update --no-self-update stable && rustup default stable
 
       - name: Check formats
-        run: cargo fmt --check
+        run: cargo fmt --all --check
 
       - name: Setup cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4
 
-      - name: Check code quality
+      - name: Check workspace quality
         if: ${{ !startsWith(github.head_ref, 'release-please--') }}
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --workspace -- -D warnings
 
       - name: Check release crate quality
         if: ${{ startsWith(github.head_ref, 'release-please--') }}
         run: |
           COMPONENT=$(echo "${{ github.head_ref }}" | sed 's/release-please--branches--main--components--//')
-          cargo clippy -p "$COMPONENT" -- -D warnings
+          CRATE_DIR=$(find crates -maxdepth 1 -type d | while read dir; do
+            if [ -f "$dir/Cargo.toml" ]; then
+              PKG=$(grep '^name = ' "$dir/Cargo.toml" | head -1 | sed 's/name = "//;s/"//')
+              if [ "$PKG" = "$COMPONENT" ]; then
+                echo "$dir"
+                break
+              fi
+            fi
+          done)
+          if [ -n "$CRATE_DIR" ]; then
+            cargo clippy --manifest-path "$CRATE_DIR/Cargo.toml" -- -D warnings
+          else
+            cargo clippy --workspace -- -D warnings
+          fi

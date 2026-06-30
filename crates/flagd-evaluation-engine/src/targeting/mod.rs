@@ -1,5 +1,8 @@
 use crate::error::FlagdEvaluationError;
-use datalogic_rs::DataLogic;
+use datalogic_rs::Engine;
+use datalogic_rs::bumpalo::Bump;
+use datalogic_rs::operator::EvalContext;
+use datalogic_rs::{ArenaExt, CustomOperator, DataValue};
 use open_feature::{EvaluationContext, EvaluationContextFieldValue};
 use serde_json::Value;
 use std::sync::Arc;
@@ -16,7 +19,7 @@ use semver::SemVerOperator;
 /// - `fractional`: Consistent hashing for percentage-based rollouts
 /// - `sem_ver`: Semantic version comparison
 pub struct Operator {
-    logic: Arc<DataLogic>,
+    logic: Arc<Engine>,
 }
 
 impl Default for Operator {
@@ -27,12 +30,12 @@ impl Default for Operator {
 
 impl Operator {
     pub fn new() -> Self {
-        // Create a new DataLogic instance
-        let mut logic = DataLogic::new();
-
-        // Register custom operators
-        logic.add_operator("fractional".to_string(), Box::new(FractionalOperator));
-        logic.add_operator("sem_ver".to_string(), Box::new(SemVerOperator));
+        let logic = Engine::builder()
+            .add_operator("fractional", FractionalOperator)
+            .add_operator("sem_ver", SemVerOperator)
+            .add_operator("starts_with", StartsWithOperator)
+            .add_operator("ends_with", EndsWithOperator)
+            .build();
 
         Operator {
             logic: Arc::new(logic),
@@ -45,33 +48,38 @@ impl Operator {
         targeting_rule: &str,
         ctx: &EvaluationContext,
     ) -> Result<Option<String>, FlagdEvaluationError> {
-        // Parse the rule from JSON string
-        let rule_value: Value = serde_json::from_str(targeting_rule)?;
-
-        // Compile the logic
-        let compiled = self.logic.compile(&rule_value).map_err(|e| {
-            FlagdEvaluationError::Provider(format!("Failed to compile targeting rule: {:?}", e))
+        let targeting_rule = Self::normalize_targeting_rule(targeting_rule)?;
+        let compiled = self.logic.compile(&targeting_rule).map_err(|e| {
+            FlagdEvaluationError::Parse(format!("Failed to compile targeting rule: {:?}", e))
         })?;
 
         // Build context data as serde_json::Value
-        let context_data = Arc::new(self.build_context(flag_key, ctx));
+        let context_data = self.build_context(flag_key, ctx);
 
-        // Evaluate using DataLogic
-        match self.logic.evaluate(&compiled, context_data) {
+        // Evaluate using datalogic-rs
+        let mut session = self.logic.session();
+        match session.eval_str(&compiled, &context_data.to_string()) {
             Ok(result) => {
                 // Convert result to Option<String>
-                match result {
+                match serde_json::from_str::<Value>(&result)? {
                     Value::String(s) => Ok(Some(s)),
                     Value::Null => Ok(None),
                     _ => Ok(Some(result.to_string())),
                 }
             }
             Err(e) => {
-                // Log and return None on error
                 tracing::debug!("DataLogic evaluation error: {:?}", e);
-                Ok(None)
+                Err(FlagdEvaluationError::Parse(format!(
+                    "Failed to evaluate targeting rule: {:?}",
+                    e
+                )))
             }
         }
+    }
+
+    fn normalize_targeting_rule(targeting_rule: &str) -> Result<String, FlagdEvaluationError> {
+        let value: Value = serde_json::from_str(targeting_rule)?;
+        serde_json::to_string(&value).map_err(FlagdEvaluationError::from)
     }
 
     fn build_context(&self, flag_key: &str, ctx: &EvaluationContext) -> Value {
@@ -167,6 +175,42 @@ impl Operator {
                     .collect(),
             ),
         }
+    }
+}
+
+struct StartsWithOperator;
+struct EndsWithOperator;
+
+impl CustomOperator for StartsWithOperator {
+    fn evaluate<'a>(
+        &self,
+        args: &[&'a DataValue<'a>],
+        _context: &mut EvalContext<'_, 'a>,
+        arena: &'a Bump,
+    ) -> datalogic_rs::Result<&'a DataValue<'a>> {
+        Ok(arena.bool(string_op(args, |text, pattern| text.starts_with(pattern))))
+    }
+}
+
+impl CustomOperator for EndsWithOperator {
+    fn evaluate<'a>(
+        &self,
+        args: &[&'a DataValue<'a>],
+        _context: &mut EvalContext<'_, 'a>,
+        arena: &'a Bump,
+    ) -> datalogic_rs::Result<&'a DataValue<'a>> {
+        Ok(arena.bool(string_op(args, |text, pattern| text.ends_with(pattern))))
+    }
+}
+
+fn string_op(args: &[&DataValue<'_>], op: impl Fn(&str, &str) -> bool) -> bool {
+    let [text, pattern, ..] = args else {
+        return false;
+    };
+
+    match (text.as_str(), pattern.as_str()) {
+        (Some(text), Some(pattern)) => op(text, pattern),
+        _ => false,
     }
 }
 
@@ -342,6 +386,34 @@ mod tests {
     }
 
     #[test]
+    fn test_apply_targeting_rule_with_string_operators() {
+        let operator = Operator::new();
+        let ctx = EvaluationContext::default().with_custom_field("email", "employee@company.com");
+
+        let ends_with_rule = r#"{
+            "if": [
+                {"ends_with": [{"var": "email"}, "@company.com"]},
+                "internal",
+                "external"
+            ]
+        }"#;
+
+        let result = operator.apply("test-flag", ends_with_rule, &ctx).unwrap();
+        assert_eq!(result, Some("internal".to_string()));
+
+        let starts_with_rule = r#"{
+            "if": [
+                {"starts_with": [{"var": "email"}, "employee@"]},
+                "internal",
+                "external"
+            ]
+        }"#;
+
+        let result = operator.apply("test-flag", starts_with_rule, &ctx).unwrap();
+        assert_eq!(result, Some("internal".to_string()));
+    }
+
+    #[test]
     fn test_apply_empty_targeting_returns_none() {
         let operator = Operator::new();
         let ctx = EvaluationContext::default();
@@ -349,5 +421,30 @@ mod tests {
         let rule = "null";
         let result = operator.apply("test-flag", rule, &ctx).unwrap();
         assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_apply_substring_operators_with_numeric_pattern() {
+        let operator = Operator::new();
+        let ctx = EvaluationContext::default().with_custom_field("id", "3");
+
+        let rule = r#"{
+            "if": [
+                {"starts_with": [{"var": "id"}, "abc"]},
+                "prefix",
+                {"if": [
+                    {"ends_with": [{"var": "id"}, "xyz"]},
+                    "postfix",
+                    {"if": [
+                        {"ends_with": [{"var": "id"}, 3]},
+                        "fail",
+                        "none"
+                    ]}
+                ]}
+            ]
+        }"#;
+
+        let result = operator.apply("test-flag", rule, &ctx).unwrap();
+        assert_eq!(result, Some("none".to_string()));
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "open-feature-flagd"
-version = "0.1.0"
+version = "0.2.1"
 edition = "2024"
 rust-version = "1.88" # MSRV
 description = "The official flagd provider for OpenFeature."
@@ -37,14 +37,14 @@ in-process = ["dep:flagd-evaluation-engine", "dep:tonic", "dep:tonic-prost", "de
 tonic-prost-build = { workspace = true }
 
 [dev-dependencies]
-cucumber = "0.22"
+cucumber = "0.23"
 futures-core = "0.3"
 testcontainers = { version = "0.27", features = ["http_wait", "blocking"] }
 # Force time >=0.3.47 to fix RUSTSEC-2026-0009
 time = ">=0.3.47"
 wiremock = "0.6.5"
-tempfile = "3.24.0"
-serial_test = "3.2"
+tempfile = "3.27.0"
+serial_test = "3.5"
 test-log = { version = "0.2", features = ["trace"] }
 
 
@@ -54,7 +54,7 @@ async-trait = { workspace = true }
 tokio = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
-lru = "0.16"
+lru = "0.18"
 tokio-stream = "0.1"
 tracing = { workspace = true }
 thiserror = { workspace = true }
@@ -79,5 +79,6 @@ semver = { workspace = true, optional = true }
 notify = { workspace = true, optional = true }
 
 # Evaluation engine (extracted to separate crate)
-flagd-evaluation-engine = { path = "../flagd-evaluation-engine", version = "0.0.1", optional = true }
-open-feature-ofrep = { path = "../ofrep", version = "0.0.4", optional = true }
+flagd-evaluation-engine = { path = "../flagd-evaluation-engine", version = "0.0.3", optional = true }
+# OFREP (used for REST resolution)
+open-feature-ofrep = { path = "../ofrep", version = "0.1.1", optional = true }

@@ -5,14 +5,14 @@ documentation = "https://docs.rs/open-feature-ofrep"
 homepage = "https://openfeature.dev/"
 license = "Apache-2.0"
 repository = "https://github.com/open-feature/rust-sdk-contrib"
-version = "0.0.4"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.85.1"
 
 [dev-dependencies]
 wiremock = "0.6.5"
 test-log = { version = "0.2", features = ["trace"] }
-serial_test = "3.2.0"
+serial_test = "3.5.0"
 
 [dependencies]
 async-trait = { workspace = true }

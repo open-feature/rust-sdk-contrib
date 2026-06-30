@@ -3,9 +3,13 @@ use crate::resolver::common::upstream::UpstreamConfig;
 use crate::resolver::in_process::targeting::Operator;
 use crate::{CacheService, FlagdOptions};
 use async_trait::async_trait;
+use flagd_evaluation_engine::FlagdEvaluationError;
 use open_feature::Value as OpenFeatureValue;
 use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
-use open_feature::{EvaluationContext, EvaluationError, EvaluationErrorCode, StructValue, Value};
+use open_feature::{
+    EvaluationContext, EvaluationContextFieldValue, EvaluationError, EvaluationErrorCode,
+    FlagMetadata, FlagMetadataValue, StructValue, Value,
+};
 use serde_json::Value as JsonValue;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -186,6 +190,7 @@ impl InProcessResolver {
         }
 
         let query_result = self.store.get_flag(flag_key).await;
+        let enriched_context = enrich_context(context, &query_result.sync_metadata);
 
         let flag = match query_result.feature_flag {
             Some(flag) => flag,
@@ -204,43 +209,53 @@ impl InProcessResolver {
                 .build());
         }
 
-        let variant = if flag.get_targeting() == "{}" {
-            flag.default_variant
+        let flag_metadata = resolve_metadata(&query_result.flag_set_metadata, &flag.metadata);
+
+        let (variant, reason) = if flag.get_targeting() == "{}" {
+            (flag.default_variant, open_feature::EvaluationReason::Static)
         } else {
             match self
                 .operator
-                .apply(flag_key, &flag.get_targeting(), context)
-                .map_err(|e| {
-                    EvaluationError::builder()
-                        .code(EvaluationErrorCode::General(e.to_string()))
-                        .message(e.to_string())
-                        .build()
-                })? {
-                Some(variant) => variant,
-                None => flag.default_variant,
+                .apply(flag_key, &flag.get_targeting(), &enriched_context)
+                .map_err(targeting_evaluation_error)?
+            {
+                Some(variant) => (variant, open_feature::EvaluationReason::TargetingMatch),
+                None => (
+                    flag.default_variant,
+                    open_feature::EvaluationReason::Default,
+                ),
             }
         };
 
-        let value = flag
-            .variants
-            .get(&variant)
-            .and_then(value_converter)
-            .ok_or_else(|| {
-                EvaluationError::builder()
-                    .code(EvaluationErrorCode::TypeMismatch)
-                    .message(format!(
-                        "Value for flag {} is not a {}",
-                        flag_key, type_name
-                    ))
-                    .build()
-            })?;
+        let variant_value = flag.variants.get(&variant).ok_or_else(|| {
+            EvaluationError::builder()
+                .code(EvaluationErrorCode::General(format!(
+                    "Variant {} for flag {} was not found",
+                    variant, flag_key
+                )))
+                .message(format!(
+                    "Variant {} for flag {} was not found",
+                    variant, flag_key
+                ))
+                .build()
+        })?;
+
+        let value = value_converter(variant_value).ok_or_else(|| {
+            EvaluationError::builder()
+                .code(EvaluationErrorCode::TypeMismatch)
+                .message(format!(
+                    "Value for flag {} is not a {}",
+                    flag_key, type_name
+                ))
+                .build()
+        })?;
 
         // Cache the result based on the type
         if let Some(cache) = &self.cache {
-            let cache_value = match flag.variants.get(&variant) {
-                Some(JsonValue::Bool(b)) => OpenFeatureValue::Bool(*b),
-                Some(JsonValue::String(s)) => OpenFeatureValue::String(s.clone()),
-                Some(JsonValue::Number(n)) => {
+            let cache_value = match variant_value {
+                JsonValue::Bool(b) => OpenFeatureValue::Bool(*b),
+                JsonValue::String(s) => OpenFeatureValue::String(s.clone()),
+                JsonValue::Number(n) => {
                     if n.is_i64() {
                         OpenFeatureValue::Int(n.as_i64().unwrap())
                     } else {
@@ -251,8 +266,8 @@ impl InProcessResolver {
                     return Ok(ResolutionDetails {
                         value,
                         variant: Some(variant),
-                        reason: Some(open_feature::EvaluationReason::TargetingMatch),
-                        flag_metadata: None,
+                        reason: Some(reason),
+                        flag_metadata,
                     });
                 }
             };
@@ -262,9 +277,97 @@ impl InProcessResolver {
         Ok(ResolutionDetails {
             value,
             variant: Some(variant),
-            reason: Some(open_feature::EvaluationReason::TargetingMatch),
-            flag_metadata: None,
+            reason: Some(reason),
+            flag_metadata,
         })
+    }
+}
+
+fn targeting_evaluation_error(error: FlagdEvaluationError) -> EvaluationError {
+    let message = error.to_string();
+    let code = match error {
+        FlagdEvaluationError::Parse(_) | FlagdEvaluationError::Json(_) => {
+            EvaluationErrorCode::ParseError
+        }
+        _ => EvaluationErrorCode::General(message.clone()),
+    };
+
+    EvaluationError::builder()
+        .code(code)
+        .message(message)
+        .build()
+}
+
+fn enrich_context(
+    context: &EvaluationContext,
+    sync_metadata: &std::collections::HashMap<String, JsonValue>,
+) -> EvaluationContext {
+    let mut enriched = context.clone();
+
+    for (key, value) in sync_metadata {
+        if enriched.custom_fields.contains_key(key) {
+            continue;
+        }
+        if let Some(value) = context_field_value(value) {
+            enriched.add_custom_field(key.clone(), value);
+        }
+    }
+
+    enriched
+}
+
+fn context_field_value(value: &JsonValue) -> Option<EvaluationContextFieldValue> {
+    match value {
+        JsonValue::Bool(value) => Some(EvaluationContextFieldValue::Bool(*value)),
+        JsonValue::Number(value) => {
+            if let Some(value) = value.as_i64() {
+                Some(EvaluationContextFieldValue::Int(value))
+            } else {
+                value.as_f64().map(EvaluationContextFieldValue::Float)
+            }
+        }
+        JsonValue::String(value) => Some(EvaluationContextFieldValue::String(value.clone())),
+        _ => None,
+    }
+}
+
+fn resolve_metadata(
+    flag_set_metadata: &std::collections::HashMap<String, JsonValue>,
+    flag_metadata: &std::collections::HashMap<String, JsonValue>,
+) -> Option<FlagMetadata> {
+    let mut metadata = FlagMetadata::default();
+
+    for (key, value) in flag_set_metadata {
+        if let Some(value) = metadata_value(value) {
+            metadata.add_value(key.clone(), value);
+        }
+    }
+
+    for (key, value) in flag_metadata {
+        if let Some(value) = metadata_value(value) {
+            metadata.add_value(key.clone(), value);
+        }
+    }
+
+    if metadata.values.is_empty() {
+        None
+    } else {
+        Some(metadata)
+    }
+}
+
+fn metadata_value(value: &JsonValue) -> Option<FlagMetadataValue> {
+    match value {
+        JsonValue::Bool(value) => Some(FlagMetadataValue::Bool(*value)),
+        JsonValue::Number(value) => {
+            if let Some(value) = value.as_i64() {
+                Some(FlagMetadataValue::Int(value))
+            } else {
+                value.as_f64().map(FlagMetadataValue::Float)
+            }
+        }
+        JsonValue::String(value) => Some(FlagMetadataValue::String(value.clone())),
+        _ => None,
     }
 }
 

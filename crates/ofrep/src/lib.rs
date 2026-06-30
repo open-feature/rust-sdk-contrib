@@ -13,7 +13,6 @@
 //! cargo add open-feature
 //! ```
 //! Then integrate it into your application:
-//!
 //! ```rust,no_run
 //! use std::time::Duration;
 //! use open_feature::provider::FeatureProvider;

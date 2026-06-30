@@ -269,7 +269,7 @@ impl GrpcStreamConnector {
                         .send(QueuePayload {
                             payload_type: QueuePayloadType::Data,
                             flag_data: msg.flag_configuration,
-                            metadata: None,
+                            metadata: msg.sync_context.map(prost_struct_to_json_map),
                         })
                         .await?;
                 }
@@ -310,6 +310,36 @@ impl GrpcStreamConnector {
             sleep(Duration::from_millis(current_delay as u64)).await;
             // Exponential backoff: double delay until max backoff is reached.
             current_delay = (current_delay * 2).min(self.retry_backoff_max_ms);
+        }
+    }
+}
+
+fn prost_struct_to_json_map(
+    value: prost_types::Struct,
+) -> std::collections::HashMap<String, serde_json::Value> {
+    value
+        .fields
+        .into_iter()
+        .map(|(key, value)| (key, prost_value_to_json(value)))
+        .collect()
+}
+
+fn prost_value_to_json(value: prost_types::Value) -> serde_json::Value {
+    match value.kind {
+        Some(prost_types::value::Kind::NullValue(_)) | None => serde_json::Value::Null,
+        Some(prost_types::value::Kind::NumberValue(value)) => serde_json::Number::from_f64(value)
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Null),
+        Some(prost_types::value::Kind::StringValue(value)) => serde_json::Value::String(value),
+        Some(prost_types::value::Kind::BoolValue(value)) => serde_json::Value::Bool(value),
+        Some(prost_types::value::Kind::StructValue(value)) => {
+            let map = prost_struct_to_json_map(value)
+                .into_iter()
+                .collect::<serde_json::Map<_, _>>();
+            serde_json::Value::Object(map)
+        }
+        Some(prost_types::value::Kind::ListValue(value)) => {
+            serde_json::Value::Array(value.values.into_iter().map(prost_value_to_json).collect())
         }
     }
 }

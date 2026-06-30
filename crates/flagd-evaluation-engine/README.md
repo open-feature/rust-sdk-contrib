@@ -10,7 +10,6 @@ A JSONLogic-based evaluation engine for flagd, providing local flag evaluation w
 - **String Operations**: Custom operators for "starts_with" and "ends_with" comparisons
 
 ## Installation
-
 Add the dependency in your `Cargo.toml`:
 
 ```bash
@@ -26,7 +25,6 @@ use open_feature::EvaluationContext;
 fn main() {
     // Create the operator for evaluating targeting rules
     let operator = Operator::new();
-
     // Create evaluation context
     let context = EvaluationContext::default()
         .with_targeting_key("user-123")
@@ -38,7 +36,6 @@ fn main() {
         r#"{"if": [{"==": [{"var": "tier"}, "premium"]}, "gold", "silver"]}"#,
         &context,
     );
-
     println!("Result: {:?}", result);
 }
 ```
