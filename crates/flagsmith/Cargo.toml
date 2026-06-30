@@ -1,6 +1,6 @@
 [package]
 name = "open-feature-flagsmith"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["OpenFeature Maintainers"]
 edition = "2024"
 license = "Apache-2.0"

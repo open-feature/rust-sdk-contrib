@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagsmith-v0.1.0...open-feature-flagsmith-v0.1.1) (2026-06-30)
+
+
+### 🐛 Bug Fixes
+
+* **deps:** update rust crate reqwest to 0.12 ([#86](https://github.com/open-feature/rust-sdk-contrib/issues/86)) ([2cdb851](https://github.com/open-feature/rust-sdk-contrib/commit/2cdb85195232b1d7b04a4df3452aeef5c7ec3dfb))
+
+
+### ✨ New Features
+
+* add-flagsmith-provider-crate ([#82](https://github.com/open-feature/rust-sdk-contrib/issues/82)) ([25a3a3e](https://github.com/open-feature/rust-sdk-contrib/commit/25a3a3e5432a66f26d0c099d459634bf33b1beb3))
+* **flagd:** Cargo features for evaluation modes ([#88](https://github.com/open-feature/rust-sdk-contrib/issues/88)) ([6ba9d48](https://github.com/open-feature/rust-sdk-contrib/commit/6ba9d48422313cba941fd77b99d2dfae06e95324))
+
 ## [0.1.0] - 2025-11-19
 
 ### Added
