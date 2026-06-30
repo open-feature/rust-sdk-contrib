@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.4](https://github.com/open-feature/rust-sdk-contrib/compare/flagd-evaluation-engine-v0.0.3...flagd-evaluation-engine-v0.0.4) (2026-06-30)
+
+
+### 🐛 Bug Fixes
+
+* **test:** Improve flagd in-process evaluation conformance and Gherkin test coverage ([#147](https://github.com/open-feature/rust-sdk-contrib/issues/147)) ([19a9ebb](https://github.com/open-feature/rust-sdk-contrib/commit/19a9ebb8f8b5c1887c0838a4361b4cbd49289f0a))
+
 ## [0.0.3](https://github.com/open-feature/rust-sdk-contrib/compare/flagd-evaluation-engine-v0.0.2...flagd-evaluation-engine-v0.0.3) (2026-06-24)
 
 
