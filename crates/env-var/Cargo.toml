@@ -14,7 +14,7 @@ keywords = ["open-feature", "feature-flag", "environment-variable"]
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-open-feature = "0.2.7"
+open-feature = "0.3.0"
 async-trait = "0.1.89"
 
 [dev-dependencies]
