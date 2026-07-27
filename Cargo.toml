@@ -46,7 +46,7 @@ tokio = { version = "1.52", features = ["sync", "time", "fs", "rt", "rt-multi-th
 notify = "8.2"
 
 # gRPC
-tonic = { version = "0.14", default-features = false, features = ["transport", "codegen", "tls-ring", "tls-webpki-roots"] }
+tonic = { version = "0.14", default-features = false, features = ["transport", "codegen", "tls-webpki-roots"] }
 tonic-prost = "0.14"
 tonic-prost-build = "0.14"
 prost = "0.14"
