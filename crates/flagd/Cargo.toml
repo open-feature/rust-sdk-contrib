@@ -23,7 +23,14 @@ include = [
 ]
 
 [features]
-default = ["rpc", "rest", "in-process"]
+default = ["rpc", "rest", "in-process", "tls-ring"]
+# rustls crypto backend for the gRPC transport — exactly one should be enabled.
+# `tls-ring` matches the previous hard-coded behaviour; `tls-aws-lc` is for applications
+# whose dependency graph already standardises on aws-lc-rs (e.g. anything using the AWS SDK),
+# where enabling ring as well makes rustls unable to auto-select a CryptoProvider and
+# panic at first TLS use.
+tls-ring = ["tonic?/tls-ring"]
+tls-aws-lc = ["tonic?/tls-aws-lc"]
 # RPC evaluation mode - uses gRPC to connect to flagd service
 rpc = ["dep:tonic", "dep:tonic-prost", "dep:prost", "dep:prost-types", "dep:hyper-util", "dep:tower"]
 # REST evaluation mode - uses HTTP/OFREP to connect to flagd service
