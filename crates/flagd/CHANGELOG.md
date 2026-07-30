@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.2.2](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagd-v0.2.1...open-feature-flagd-v0.2.2) (2026-07-30)
+
+
+### 🐛 Bug Fixes
+
+* **test:** Improve flagd in-process evaluation conformance and Gherkin test coverage ([#147](https://github.com/open-feature/rust-sdk-contrib/issues/147)) ([19a9ebb](https://github.com/open-feature/rust-sdk-contrib/commit/19a9ebb8f8b5c1887c0838a4361b4cbd49289f0a))
+
+
+### ✨ New Features
+
+* **flagd:** make the tonic rustls backend selectable (tls-ring default, tls-aws-lc opt-in) ([#153](https://github.com/open-feature/rust-sdk-contrib/issues/153)) ([50ee98f](https://github.com/open-feature/rust-sdk-contrib/commit/50ee98f7808126057dd5bb3023e475273cdd31c9))
+
+
+### 🧹 Chore
+
+* **deps:** update rust crate serial_test to v4 ([#152](https://github.com/open-feature/rust-sdk-contrib/issues/152)) ([d7da834](https://github.com/open-feature/rust-sdk-contrib/commit/d7da834d2d00f708306acfd62c59d4dde43be305))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * flagd-evaluation-engine bumped from 0.0.3 to 0.0.4
+    * open-feature-ofrep bumped from 0.1.1 to 0.1.2
+
 ## [0.2.1](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagd-v0.2.0...open-feature-flagd-v0.2.1) (2026-06-24)
 
 

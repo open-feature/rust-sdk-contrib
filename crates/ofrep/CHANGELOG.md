@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-ofrep-v0.1.1...open-feature-ofrep-v0.1.2) (2026-07-30)
+
+
+### 🧹 Chore
+
+* **deps:** update rust crate serial_test to v4 ([#152](https://github.com/open-feature/rust-sdk-contrib/issues/152)) ([d7da834](https://github.com/open-feature/rust-sdk-contrib/commit/d7da834d2d00f708306acfd62c59d4dde43be305))
+
 ## [0.1.1](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-ofrep-v0.1.0...open-feature-ofrep-v0.1.1) (2026-06-24)
 
 
