@@ -51,7 +51,7 @@ testcontainers = { version = "0.27", features = ["http_wait", "blocking"] }
 time = ">=0.3.47"
 wiremock = "0.6.5"
 tempfile = "3.27.0"
-serial_test = "3.5"
+serial_test = "4.0"
 test-log = { version = "0.2", features = ["trace"] }
 
 
