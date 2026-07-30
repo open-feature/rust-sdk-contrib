@@ -5,6 +5,7 @@
     "config:best-practices",
     "helpers:pinGitHubActionDigestsToSemver"
   ],
+  "dependencyDashboardApproval": false,
   "packageRules": [
     {
       "groupName": "patching",
