@@ -15,14 +15,6 @@
       "dependencyDashboardCategory": "{{updateType}} {{categories}} updates",
       "dependencyDashboardFooter": "These updates will also require pr approvals unless they are minor devDependencies.",
       "matchUpdateTypes": ["major", "minor"],
-      "matchCategories": ["!ci", "!docker"]
-    },
-    {
-      "dependencyDashboardCategory": "{{updateType}} infra updates",
-      "dependencyDashboardFooter": "These updates will often auto-merge on ci passing but may require pr approvals.",
-      "dependencyDashboardHeader": "Contains updates to both ci (github actions) & docker dependencies",
-      "matchUpdateTypes": ["major", "minor"],
-      "matchCategories": ["ci", "docker"]
     },
     {
       "matchUpdateTypes": ["minor"],
