@@ -5,26 +5,32 @@
     "config:best-practices",
     "helpers:pinGitHubActionDigestsToSemver"
   ],
-  "dependencyDashboardApproval": false,
   "packageRules": [
     {
-      "groupName": "patching",
-      "matchUpdateTypes": ["patch", "digest"],
-      "schedule": ["before 6am on Weekday"]
+      "dependencyDashboardCategory": "Dependency patches",
+      "dependencyDashboardFooter": "These updates will auto-merge on ci passing.",
+      "matchUpdateTypes": ["patch", "digest"]
     },
     {
-      "groupName": "minor infra",
+      "dependencyDashboardCategory": "{{updateType}} infra updates",
+      "dependencyDashboardFooter": "These updates will often auto-merge on ci passing but may require pr approvals.",
+      "dependencyDashboardHeader": "Contains updates to both ci (github actions) & docker dependencies",
+      "matchUpdateTypes": ["major", "minor"],
+      "matchCategories": ["ci", "docker"]
+    },
+    {
       "matchUpdateTypes": ["minor"],
-      "matchCategories": ["ci", "docker"],
+      "matchCategories": ["rust"],
+      "matchDepTypes": [
+        "!devDependencies"
+      ],
+      "dependencyDashboardApproval": false,
       "schedule": ["before 7am on Monday"]
     },
     {
-      "matchUpdateTypes": ["minor"],
-      "schedule": ["before 7am on Monday"]
-    },
-    {
-      "matchUpdateTypes": ["major"],
-      "schedule": ["before 8am on Monday"]
+      "dependencyDashboardCategory": "{{updateType}} {{categories}} updates",
+      "dependencyDashboardFooter": "These updates will also require pr approvals unless they are minor devDependencies."
+      "matchUpdateTypes": ["major", "minor"]
     }
   ]
 }
