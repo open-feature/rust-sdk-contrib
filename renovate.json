@@ -13,15 +13,18 @@
     },
     {
       "dependencyDashboardCategory": "{{updateType}} {{categories}} updates",
-      "dependencyDashboardFooter": "These updates will also require pr approvals unless they are minor devDependencies.",
-      "matchUpdateTypes": ["major", "minor"],
+      "dependencyDashboardFooter": "These updates will require a manual pr approval/merge if they are a major update. Otherwise they will auto-merge on ci passing.",
+      "matchUpdateTypes": ["major", "minor"]
+    },
+    {
+      "dependencyDashboardCategory": "{{parentDir}} updates",
+      "dependencyDashboardFooter": "These updates will require manual pr approval/merge if they are a major update. Otherwise they will auto-merge on ci passing.",
+      "matchCategories": ["rust"],
+      "additionalBranchPrefix": "{{parentDir}}-"
     },
     {
       "matchUpdateTypes": ["minor"],
       "matchCategories": ["rust"],
-      "matchDepTypes": [
-        "!devDependencies"
-      ],
       "dependencyDashboardApproval": false,
       "schedule": ["before 7am on Monday"]
     }
