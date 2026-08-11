@@ -3,7 +3,6 @@ use flagsmith_flag_engine::types::{FlagsmithValue, FlagsmithValueType};
 use open_feature::provider::FeatureProvider;
 use open_feature::{EvaluationContext, EvaluationReason as Reason};
 use open_feature_flagsmith::{FlagsmithClient, FlagsmithProvider};
-use serde_json;
 use std::collections::HashMap;
 use std::sync::Arc;
 
