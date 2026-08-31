@@ -1,6 +1,32 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
+    "github>open-feature/community-tooling",
+    "config:best-practices",
+    "helpers:pinGitHubActionDigestsToSemver"
+  ],
+  "packageRules": [
+    {
+      "dependencyDashboardCategory": "Dependency patches",
+      "dependencyDashboardFooter": "These updates will auto-merge on ci passing.",
+      "matchUpdateTypes": ["patch", "digest"]
+    },
+    {
+      "dependencyDashboardCategory": "{{updateType}} {{categories}} updates",
+      "dependencyDashboardFooter": "These updates will require a manual pr approval/merge if they are a major update. Otherwise they will auto-merge on ci passing.",
+      "matchUpdateTypes": ["major", "minor"]
+    },
+    {
+      "dependencyDashboardCategory": "{{parentDir}} updates",
+      "dependencyDashboardFooter": "These updates will require manual pr approval/merge if they are a major/minor update. Otherwise they will auto-merge on ci passing.",
+      "matchCategories": ["rust"],
+      "additionalBranchPrefix": "{{parentDir}}-"
+    },
+    {
+      "matchUpdateTypes": ["minor"],
+      "matchCategories": ["rust"],
+      "dependencyDashboardApproval": false,
+      "schedule": ["before 7am on Monday"]
+    }
   ]
 }
