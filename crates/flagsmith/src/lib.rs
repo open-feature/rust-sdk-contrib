@@ -53,6 +53,7 @@ pub mod error;
 use async_trait::async_trait;
 use flagsmith::{Flagsmith, FlagsmithOptions as FlagsmithSDKOptions};
 use flagsmith_flag_engine::types::{FlagsmithValue, FlagsmithValueType};
+use http::HeaderMap;
 use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
 use open_feature::{
     EvaluationContext, EvaluationContextFieldValue, EvaluationError, EvaluationReason as Reason,
@@ -104,7 +105,7 @@ pub struct FlagsmithOptions {
     pub api_url: Option<String>,
 
     /// Custom HTTP headers
-    pub custom_headers: Option<reqwest::header::HeaderMap>,
+    pub custom_headers: Option<HeaderMap>,
 
     /// Request timeout in seconds
     pub request_timeout_seconds: Option<u64>,
