@@ -41,5 +41,5 @@ flagsmith-flag-engine = "0.6"
 
 [dev-dependencies]
 # Testing
-test-log = "0.2"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+test-log = "=0.2.21"
+tracing-subscriber = { version = "=0.3.23", features = ["env-filter"] }
