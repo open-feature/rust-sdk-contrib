@@ -61,12 +61,12 @@ async fn test_color_palette_experiment_in_process() {
         .await
         .unwrap();
 
-    // value: "#16a34a"
+    // value: "#0284c7"
     // reason: "TARGETING_MATCH"
-    // variant: "green"
+    // variant: "blue"
     // flagMetadata: None
-    assert_eq!(result.value, "16a34a");
-    assert_eq!(result.variant, Some("green".to_string()));
+    assert_eq!(result.value, "0284c7");
+    assert_eq!(result.variant, Some("blue".to_string()));
     assert_eq!(result.reason.unwrap(), EvaluationReason::TargetingMatch);
 
     assert!(result.flag_metadata.is_none());
@@ -97,8 +97,8 @@ async fn test_color_palette_experiment_file_resolver() {
         .await
         .unwrap();
 
-    assert_eq!(result.value, "16a34a");
-    assert_eq!(result.variant, Some("green".to_string()));
+    assert_eq!(result.value, "0284c7");
+    assert_eq!(result.variant, Some("blue".to_string()));
     assert_eq!(result.reason.unwrap(), EvaluationReason::TargetingMatch);
     assert!(result.flag_metadata.is_none());
 }

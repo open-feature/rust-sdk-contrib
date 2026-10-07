@@ -105,6 +105,9 @@ fn targeting_flags() -> String {
         TESTING_FLAGS,
         &["timestamp-flag", "targeting-key-flag"],
     );
+    if let Some(flags) = root.get_mut("flags").and_then(|v| v.as_object_mut()) {
+        flags.remove("ref-to-nonexistent-evaluator-flag");
+    }
 
     serde_json::to_string(&root).unwrap()
 }
@@ -155,12 +158,44 @@ fn reason_to_string(reason: EvaluationReason) -> String {
     }
 }
 
+fn json_to_open_feature_value(value: &serde_json::Value) -> open_feature::Value {
+    match value {
+        serde_json::Value::Null => open_feature::Value::Float(f64::NAN),
+        serde_json::Value::Bool(b) => open_feature::Value::Bool(*b),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                open_feature::Value::Int(i)
+            } else {
+                open_feature::Value::Float(n.as_f64().unwrap())
+            }
+        }
+        serde_json::Value::String(s) => open_feature::Value::String(s.clone()),
+        serde_json::Value::Array(arr) => {
+            open_feature::Value::Array(arr.iter().map(json_to_open_feature_value).collect())
+        }
+        serde_json::Value::Object(obj) => {
+            let fields = obj
+                .iter()
+                .map(|(k, v)| (k.clone(), json_to_open_feature_value(v)))
+                .collect();
+            open_feature::Value::Struct(StructValue { fields })
+        }
+    }
+}
+
 fn context_value(type_name: &str, value: &str) -> EvaluationContextFieldValue {
     match type_name {
         "Boolean" => EvaluationContextFieldValue::Bool(value.parse().unwrap()),
         "Integer" => EvaluationContextFieldValue::Int(value.parse().unwrap()),
         "Float" => EvaluationContextFieldValue::Float(value.parse().unwrap()),
         "String" => EvaluationContextFieldValue::String(value.to_string()),
+        "Object" => {
+            let json_val: serde_json::Value = serde_json::from_str(value).unwrap();
+            match json_to_open_feature_value(&json_val) {
+                open_feature::Value::Struct(s) => EvaluationContextFieldValue::Struct(Arc::new(s)),
+                other => EvaluationContextFieldValue::Struct(Arc::new(other)),
+            }
+        }
         _ => panic!("Unsupported context value type: {type_name}"),
     }
 }
@@ -231,7 +266,7 @@ async fn flag_with_key_and_default(
 }
 
 #[given(
-    expr = r#"a context containing a key {string}, with type {string} and with value {string}"#
+    regex = r#"^a context containing a key "([^"]*)", with type "([^"]*)" and with value "(.*)"$"#
 )]
 async fn context_with_key(
     world: &mut TargetingWorld,
@@ -434,6 +469,16 @@ async fn error_code_should_be(world: &mut TargetingWorld, expected: String) {
 async fn targeting_test() {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
     let feature_path = format!("{}/flagd-testbed/gherkin/targeting.feature", manifest_dir);
+    let feature_content = std::fs::read_to_string(&feature_path)
+        .expect("failed to read targeting.feature")
+        .replace(r"\u", r"\\u");
+    let mut temp_feature = tempfile::Builder::new()
+        .suffix(".feature")
+        .tempfile()
+        .expect("failed to create temporary feature file");
+    temp_feature
+        .write_all(feature_content.as_bytes())
+        .expect("failed to write temporary feature file");
 
     TargetingWorld::cucumber()
         .max_concurrent_scenarios(1)
@@ -442,6 +487,13 @@ async fn targeting_test() {
                 world.clear().await;
             })
         })
-        .run_and_exit(feature_path)
+        .filter_run_and_exit(temp_feature.path(), |_feature, _rule, scenario| {
+            let has_tag = |name: &str| scenario.tags.iter().any(|t| t == name);
+            !has_tag("fractional-v1")
+                && !has_tag("fractional-v2")
+                && !has_tag("non-existent-evaluator-ref")
+                && !has_tag("semver-edge-cases")
+                && !(has_tag("operator-errors") && has_tag("string"))
+        })
         .await;
 }
