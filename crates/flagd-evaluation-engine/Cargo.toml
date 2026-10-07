@@ -28,3 +28,4 @@ thiserror = { workspace = true }
 
 # OpenFeature SDK (for EvaluationContext types)
 open-feature = { workspace = true }
+ciborium = { workspace = true }
