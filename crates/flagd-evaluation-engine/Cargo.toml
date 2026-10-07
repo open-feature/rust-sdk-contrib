@@ -2,7 +2,7 @@
 name = "flagd-evaluation-engine"
 version = "0.0.4"
 edition = "2024"
-rust-version = "1.88" # MSRV
+rust-version = "1.98" # MSRV
 description = "Evaluation engine for flagd - JSONLogic-based targeting rules"
 documentation = "https://docs.rs/flagd-evaluation-engine"
 readme = "README.md"
