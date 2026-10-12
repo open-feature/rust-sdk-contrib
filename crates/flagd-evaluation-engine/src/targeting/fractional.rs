@@ -22,11 +22,15 @@ fn data_value_to_cbor(val: &DataValue) -> Option<CborValue> {
             if let Some(i) = num.as_i64() {
                 Some(CborValue::Integer(i.into()))
             } else {
+                const U64_UPPER_BOUND: f64 = (1u128 << 64) as f64;
                 let f = num.as_f64();
-                if !f.is_finite() {
-                    return None;
-                }
-                Some(CborValue::Float(f))
+                f.is_finite().then(|| {
+                    if f.fract() == 0.0 && (0.0..U64_UPPER_BOUND).contains(&f) {
+                        CborValue::Integer((f as u64).into())
+                    } else {
+                        CborValue::Float(f)
+                    }
+                })
             }
         }
         DataValue::Array(items) => {

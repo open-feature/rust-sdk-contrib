@@ -160,6 +160,9 @@ fn reason_to_string(reason: EvaluationReason) -> String {
 
 fn json_to_open_feature_value(value: &serde_json::Value) -> open_feature::Value {
     match value {
+        // `open_feature::Value` has no `Null` variant; `NaN` is intentionally used as a
+        // sentinel because `Operator::open_feature_value_to_json` maps non-finite floats
+        // (`serde_json::Number::from_f64(NaN) == None`) back to `serde_json::Value::Null`.
         serde_json::Value::Null => open_feature::Value::Float(f64::NAN),
         serde_json::Value::Bool(b) => open_feature::Value::Bool(*b),
         serde_json::Value::Number(n) => {
@@ -471,6 +474,7 @@ async fn targeting_test() {
     let feature_path = format!("{}/flagd-testbed/gherkin/targeting.feature", manifest_dir);
     let feature_content = std::fs::read_to_string(&feature_path)
         .expect("failed to read targeting.feature")
+        // cucumber-rs can't parse `\u` in table cells; escape so cells keep the literal `\uXXXX` text
         .replace(r"\u", r"\\u");
     let mut temp_feature = tempfile::Builder::new()
         .suffix(".feature")
