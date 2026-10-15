@@ -135,9 +135,11 @@ impl Operator {
             }
             EvaluationContextFieldValue::DateTime(dt) => Value::String(dt.to_string()),
             EvaluationContextFieldValue::Struct(s) => {
-                // Try to downcast to StructValue for proper serialization
+                // Try to downcast to StructValue or Value for proper serialization
                 if let Some(struct_value) = s.downcast_ref::<open_feature::StructValue>() {
                     self.struct_value_to_json(struct_value)
+                } else if let Some(of_value) = s.downcast_ref::<open_feature::Value>() {
+                    self.open_feature_value_to_json(of_value)
                 } else {
                     // Fallback for other types - serialize as string representation
                     Value::Object(serde_json::Map::new())

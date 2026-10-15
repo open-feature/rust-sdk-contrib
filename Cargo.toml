@@ -21,11 +21,13 @@ members = [
 
 [workspace.dependencies]
 # Core evaluation
-datalogic-rs = { version = "5.0.0" }
+# Pin <5.5.0 because datalogic-rs 5.5.0+ bumps MSRV to 1.98
+datalogic-rs = { version = ">=5.0.0, <5.5.0" }
 murmurhash3 = "0.0.5"
 semver = "1.0"
 
 # JSON and serialization
+ciborium = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
