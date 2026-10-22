@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagd-v0.3.0...open-feature-flagd-v0.3.1) (2026-10-22)
+
+
+### 🧹 Chore
+
+* **deps:** update rust crate lru to 0.19 ([#176](https://github.com/open-feature/rust-sdk-contrib/issues/176)) ([a1ce989](https://github.com/open-feature/rust-sdk-contrib/commit/a1ce98935c837af72ce73bd2a640522c8e0a7301))
+
 ## [0.3.0](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagd-v0.2.2...open-feature-flagd-v0.3.0) (2026-10-15)
 
 
