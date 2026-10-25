@@ -22,7 +22,7 @@ members = [
 [workspace.dependencies]
 # Core evaluation
 # Pin <5.5.0 because datalogic-rs 5.5.0+ bumps MSRV to 1.98
-datalogic-rs = { version = ">=5.0.0, <5.5.0" }
+datalogic-rs = { version = ">=5.0.0, <5.10.0" }
 murmurhash3 = "0.0.5"
 semver = "1.0"
 
