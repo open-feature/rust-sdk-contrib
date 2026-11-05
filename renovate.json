@@ -2,5 +2,12 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "github>open-feature/community-tooling"
+  ],
+  "packageRules": [
+    {
+      "description": "datalogic-rs 5.5.0+ requires rustc 1.98, above the flagd MSRV (1.88)",
+      "matchPackageNames": ["datalogic-rs"],
+      "allowedVersions": "<5.5.0"
+    }
   ]
 }
