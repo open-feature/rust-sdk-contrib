@@ -44,8 +44,8 @@
 //! ```
 
 #[allow(unused_imports)]
-use crate::flagd::evaluation::v1::EventStreamRequest;
-use crate::flagd::evaluation::v1::{
+use crate::flagd::evaluation::v2::EventStreamRequest;
+use crate::flagd::evaluation::v2::{
     ResolveBooleanRequest, ResolveBooleanResponse, ResolveFloatRequest, ResolveFloatResponse,
     ResolveIntRequest, ResolveIntResponse, ResolveObjectRequest, ResolveObjectResponse,
     ResolveStringRequest, ResolveStringResponse, service_client::ServiceClient,
@@ -103,6 +103,19 @@ fn map_grpc_status_to_error_code(status: &tonic::Status) -> EvaluationErrorCode 
         }
         Code::Unavailable => EvaluationErrorCode::General("service unavailable".to_string()),
         _ => EvaluationErrorCode::General(format!("{:?}", status.code())),
+    }
+}
+
+/// flagd.evaluation.v2 omits `value` (and `variant`) when flagd defers to the code default, for
+/// example for a flag without a `defaultVariant`; see flagd's ADR "Support Explicit Code Default
+/// Values in flagd Configuration". `FeatureProvider` never receives the code default, so this
+/// reports FLAG_NOT_FOUND, as flagd.evaluation.v1 did, and the caller falls back to it.
+fn code_default_error(flag_key: &str, reason: &str) -> EvaluationError {
+    EvaluationError {
+        code: EvaluationErrorCode::FlagNotFound,
+        message: Some(format!(
+            "flag {flag_key} returned no value (reason: {reason}), use the code default"
+        )),
     }
 }
 
@@ -225,10 +238,12 @@ impl FeatureProvider for RpcResolver {
         match self.client.clone().resolve_boolean(request).await {
             Ok(response) => {
                 let inner: ResolveBooleanResponse = response.into_inner();
-                debug!(flag_key, value = inner.value, reason = %inner.reason, "boolean flag resolved");
+                debug!(flag_key, value = ?inner.value, reason = %inner.reason, "boolean flag resolved");
                 Ok(ResolutionDetails {
-                    value: inner.value,
-                    variant: Some(inner.variant),
+                    value: inner
+                        .value
+                        .ok_or_else(|| code_default_error(flag_key, &inner.reason))?,
+                    variant: inner.variant,
                     reason: Some(EvaluationReason::Other(inner.reason)),
                     flag_metadata: inner.metadata.map(convert_proto_metadata),
                 })
@@ -258,10 +273,12 @@ impl FeatureProvider for RpcResolver {
         match self.client.clone().resolve_string(request).await {
             Ok(response) => {
                 let inner: ResolveStringResponse = response.into_inner();
-                debug!(flag_key, value = %inner.value, reason = %inner.reason, "string flag resolved");
+                debug!(flag_key, value = ?inner.value, reason = %inner.reason, "string flag resolved");
                 Ok(ResolutionDetails {
-                    value: inner.value,
-                    variant: Some(inner.variant),
+                    value: inner
+                        .value
+                        .ok_or_else(|| code_default_error(flag_key, &inner.reason))?,
+                    variant: inner.variant,
                     reason: Some(EvaluationReason::Other(inner.reason)),
                     flag_metadata: inner.metadata.map(convert_proto_metadata),
                 })
@@ -291,10 +308,12 @@ impl FeatureProvider for RpcResolver {
         match self.client.clone().resolve_float(request).await {
             Ok(response) => {
                 let inner: ResolveFloatResponse = response.into_inner();
-                debug!(flag_key, value = inner.value, reason = %inner.reason, "float flag resolved");
+                debug!(flag_key, value = ?inner.value, reason = %inner.reason, "float flag resolved");
                 Ok(ResolutionDetails {
-                    value: inner.value,
-                    variant: Some(inner.variant),
+                    value: inner
+                        .value
+                        .ok_or_else(|| code_default_error(flag_key, &inner.reason))?,
+                    variant: inner.variant,
                     reason: Some(EvaluationReason::Other(inner.reason)),
                     flag_metadata: inner.metadata.map(convert_proto_metadata),
                 })
@@ -324,10 +343,12 @@ impl FeatureProvider for RpcResolver {
         match self.client.clone().resolve_int(request).await {
             Ok(response) => {
                 let inner: ResolveIntResponse = response.into_inner();
-                debug!(flag_key, value = inner.value, reason = %inner.reason, "integer flag resolved");
+                debug!(flag_key, value = ?inner.value, reason = %inner.reason, "integer flag resolved");
                 Ok(ResolutionDetails {
-                    value: inner.value,
-                    variant: Some(inner.variant),
+                    value: inner
+                        .value
+                        .ok_or_else(|| code_default_error(flag_key, &inner.reason))?,
+                    variant: inner.variant,
                     reason: Some(EvaluationReason::Other(inner.reason)),
                     flag_metadata: inner.metadata.map(convert_proto_metadata),
                 })
@@ -359,8 +380,11 @@ impl FeatureProvider for RpcResolver {
                 let inner: ResolveObjectResponse = response.into_inner();
                 debug!(flag_key, reason = %inner.reason, "struct flag resolved");
                 Ok(ResolutionDetails {
-                    value: convert_proto_struct_to_struct_value(inner.value.unwrap_or_default()),
-                    variant: Some(inner.variant),
+                    value: inner
+                        .value
+                        .map(convert_proto_struct_to_struct_value)
+                        .ok_or_else(|| code_default_error(flag_key, &inner.reason))?,
+                    variant: inner.variant,
                     reason: Some(EvaluationReason::Other(inner.reason)),
                     flag_metadata: inner.metadata.map(convert_proto_metadata),
                 })
@@ -379,8 +403,8 @@ impl FeatureProvider for RpcResolver {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::flagd::evaluation::v1::{
-        EventStreamResponse, ResolveAllRequest, ResolveAllResponse,
+    use crate::flagd::evaluation::v2::{
+        EventStreamResponse,
         service_server::{Service, ServiceServer},
     };
     use futures_core::Stream;
@@ -400,12 +424,21 @@ mod tests {
     impl Service for MockFlagService {
         async fn resolve_boolean(
             &self,
-            _request: Request<ResolveBooleanRequest>,
+            request: Request<ResolveBooleanRequest>,
         ) -> Result<Response<ResolveBooleanResponse>, Status> {
+            // flagd omits value and variant when the flag resolves to the code default
+            if request.get_ref().flag_key == "code-default-flag" {
+                return Ok(Response::new(ResolveBooleanResponse {
+                    value: None,
+                    reason: "DEFAULT".to_string(),
+                    variant: None,
+                    metadata: None,
+                }));
+            }
             Ok(Response::new(ResolveBooleanResponse {
-                value: true,
+                value: Some(true),
                 reason: "test".to_string(),
-                variant: "test".to_string(),
+                variant: Some("test".to_string()),
                 metadata: Some(create_test_metadata()),
             }))
         }
@@ -415,9 +448,9 @@ mod tests {
             _request: Request<ResolveStringRequest>,
         ) -> Result<Response<ResolveStringResponse>, Status> {
             Ok(Response::new(ResolveStringResponse {
-                value: "test".to_string(),
+                value: Some("test".to_string()),
                 reason: "test".to_string(),
-                variant: "test".to_string(),
+                variant: Some("test".to_string()),
                 metadata: Some(create_test_metadata()),
             }))
         }
@@ -427,9 +460,9 @@ mod tests {
             _request: Request<ResolveFloatRequest>,
         ) -> Result<Response<ResolveFloatResponse>, Status> {
             Ok(Response::new(ResolveFloatResponse {
-                value: 1.0,
+                value: Some(1.0),
                 reason: "test".to_string(),
-                variant: "test".to_string(),
+                variant: Some("test".to_string()),
                 metadata: Some(create_test_metadata()),
             }))
         }
@@ -439,9 +472,9 @@ mod tests {
             _request: Request<ResolveIntRequest>,
         ) -> Result<Response<ResolveIntResponse>, Status> {
             Ok(Response::new(ResolveIntResponse {
-                value: 42,
+                value: Some(42),
                 reason: "test".to_string(),
-                variant: "test".to_string(),
+                variant: Some("test".to_string()),
                 metadata: Some(create_test_metadata()),
             }))
         }
@@ -461,17 +494,7 @@ mod tests {
             Ok(Response::new(ResolveObjectResponse {
                 value: Some(prost_types::Struct { fields }),
                 reason: "test".to_string(),
-                variant: "test".to_string(),
-                metadata: Some(create_test_metadata()),
-            }))
-        }
-
-        async fn resolve_all(
-            &self,
-            _request: Request<ResolveAllRequest>,
-        ) -> Result<Response<ResolveAllResponse>, Status> {
-            Ok(Response::new(ResolveAllResponse {
-                flags: Default::default(),
+                variant: Some("test".to_string()),
                 metadata: Some(create_test_metadata()),
             }))
         }
@@ -637,6 +660,27 @@ mod tests {
             .await
             .unwrap();
         assert!(!struct_result.value.fields.is_empty());
+    }
+
+    #[test(tokio::test(flavor = "multi_thread", worker_threads = 1))]
+    async fn test_code_default_resolution() {
+        let server = TestServer::new().await;
+        let options = FlagdOptions {
+            host: server.target.clone(),
+            port: 8013,
+            target_uri: None,
+            deadline_ms: 500,
+            ..Default::default()
+        };
+        let resolver = RpcResolver::new(&options).await.unwrap();
+        let context = EvaluationContext::default();
+
+        let err = resolver
+            .resolve_bool_value("code-default-flag", &context)
+            .await
+            .unwrap_err();
+        assert!(matches!(err.code, EvaluationErrorCode::FlagNotFound));
+        assert!(err.message.unwrap().contains("reason: DEFAULT"));
     }
 
     #[test(tokio::test(flavor = "multi_thread", worker_threads = 1))]

@@ -244,8 +244,8 @@ pub use resolver::rpc::RpcResolver;
 pub mod flagd {
     #[cfg(feature = "rpc")]
     pub mod evaluation {
-        pub mod v1 {
-            include!(concat!(env!("OUT_DIR"), "/flagd.evaluation.v1.rs"));
+        pub mod v2 {
+            include!(concat!(env!("OUT_DIR"), "/flagd.evaluation.v2.rs"));
         }
     }
     #[cfg(feature = "in-process")]
