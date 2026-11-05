@@ -16,7 +16,7 @@ keywords = ["openfeature", "feature-flags", "flagsmith"]
 open-feature = "0.2"
 
 # Flagsmith SDK
-flagsmith = "3.0"
+flagsmith = "3.2"
 
 # Async runtime
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
@@ -37,7 +37,7 @@ url = "2.5"
 http = "1"
 
 # Flagsmith flag engine types (must match flagsmith version)
-flagsmith-flag-engine = "0.6"
+flagsmith-flag-engine = "0.7"
 
 [dev-dependencies]
 # Testing
