@@ -2,5 +2,26 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "github>open-feature/community-tooling"
+  ],
+  "packageRules": [
+    {
+      "dependencyDashboardCategory": "Dependency patches",
+      "matchUpdateTypes": ["patch", "digest"]
+    },
+    {
+      "dependencyDashboardCategory": "{{updateType}} {{categories}} updates",
+      "matchUpdateTypes": ["major", "minor"]
+    },
+    {
+      "dependencyDashboardCategory": "{{parentDir}} updates",
+      "matchCategories": ["rust"],
+      "additionalBranchPrefix": "{{parentDir}}-"
+    },
+    {
+      "matchUpdateTypes": ["minor"],
+      "matchCategories": ["rust"],
+      "dependencyDashboardApproval": false,
+      "schedule": ["before 7am on Monday"]
+    }
   ]
 }
