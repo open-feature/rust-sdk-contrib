@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagsmith-v0.1.1...open-feature-flagsmith-v0.1.2) (2026-11-06)
+
+
+### 🧹 Chore
+
+* **deps:** update rust crate flagsmith-flag-engine to 0.7 ([#181](https://github.com/open-feature/rust-sdk-contrib/issues/181)) ([3b90d9a](https://github.com/open-feature/rust-sdk-contrib/commit/3b90d9a31e105448c516db39fab4274378ec61e3))
+
 ## [0.1.1](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagsmith-v0.1.0...open-feature-flagsmith-v0.1.1) (2026-08-31)
 
 
