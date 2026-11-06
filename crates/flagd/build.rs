@@ -5,7 +5,7 @@ fn main() {
 
     // Check for features via CARGO_FEATURE_* environment variables
     if std::env::var("CARGO_FEATURE_RPC").is_ok() {
-        protos.push("schemas/protobuf/flagd/evaluation/v1/evaluation.proto");
+        protos.push("schemas/protobuf/flagd/evaluation/v2/evaluation.proto");
     }
 
     if std::env::var("CARGO_FEATURE_IN_PROCESS").is_ok() {

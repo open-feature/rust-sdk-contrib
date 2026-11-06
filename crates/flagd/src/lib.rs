@@ -91,6 +91,8 @@
 //! ### Remote Resolver (RPC)
 //! In RPC mode, the provider communicates with flagd via gRPC. It supports features like streaming updates, retry mechanisms, and name resolution (including Envoy).
 //!
+//! The RPC resolver uses the `flagd.evaluation.v2` gRPC service, so the flagd server must implement it. Servers that only serve `flagd.evaluation.v1` are not supported.
+//!
 //! ```rust,no_run
 //! use open_feature_flagd::{FlagdOptions, FlagdProvider, ResolverType};
 //! use open_feature::provider::FeatureProvider;
@@ -244,8 +246,8 @@ pub use resolver::rpc::RpcResolver;
 pub mod flagd {
     #[cfg(feature = "rpc")]
     pub mod evaluation {
-        pub mod v1 {
-            include!(concat!(env!("OUT_DIR"), "/flagd.evaluation.v1.rs"));
+        pub mod v2 {
+            include!(concat!(env!("OUT_DIR"), "/flagd.evaluation.v2.rs"));
         }
     }
     #[cfg(feature = "in-process")]
