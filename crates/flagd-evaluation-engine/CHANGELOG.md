@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.0](https://github.com/open-feature/rust-sdk-contrib/compare/flagd-evaluation-engine-v0.0.4...flagd-evaluation-engine-v0.1.0) (2026-10-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* bucket on any context type; (fractional re-assignment) ([#165](https://github.com/open-feature/rust-sdk-contrib/issues/165))
+
+### ✨ New Features
+
+* bucket on any context type; (fractional re-assignment) ([#165](https://github.com/open-feature/rust-sdk-contrib/issues/165)) ([2990e9d](https://github.com/open-feature/rust-sdk-contrib/commit/2990e9dd76680ca94874a3eb97330b00e4206eb5))
+
 ## [0.0.4](https://github.com/open-feature/rust-sdk-contrib/compare/flagd-evaluation-engine-v0.0.3...flagd-evaluation-engine-v0.0.4) (2026-07-30)
 
 

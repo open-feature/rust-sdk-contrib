@@ -8,7 +8,8 @@ edition = "2024"
 [dependencies]
 
 [workspace]
-resolver = "2"
+# MSRV-aware resolution: prefer dependency versions compatible with members' rust-version
+resolver = "3"
 
 members = [
     "crates/env-var",
@@ -21,11 +22,14 @@ members = [
 
 [workspace.dependencies]
 # Core evaluation
-datalogic-rs = { version = "5.0.0" }
+# datalogic-rs 5.5.0+ needs rustc 1.98; resolver = "3" keeps the workspace lockfile below it for
+# MSRV 1.88 without capping the range downstream users see
+datalogic-rs = { version = ">=5.0.0, <5.10.0" }
 murmurhash3 = "0.0.5"
 semver = "1.0"
 
 # JSON and serialization
+ciborium = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
