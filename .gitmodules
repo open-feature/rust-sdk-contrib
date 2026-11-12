@@ -21,4 +21,4 @@
 [submodule "crates/flagd/schemas"]
 	path = crates/flagd/schemas
 	url = https://github.com/open-feature/flagd-schemas
-	branch = json/json-schema-v0.2.13
+	branch = json/json-schema-v0.2.15
