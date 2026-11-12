@@ -41,6 +41,10 @@ jobs:
         working-directory: crates/flagd
         run: cargo msrv verify
 
+      - name: Verify OFREP Minimum Supported Rust Version
+        working-directory: crates/ofrep
+        run: cargo msrv verify
+
       - name: Check README is up-to-date
         working-directory: crates/flagd
         run: |
