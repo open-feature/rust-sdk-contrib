@@ -23,6 +23,5 @@ tracing = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 chrono = { workspace = true }
-once_cell = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 url = { workspace = true }

@@ -23,7 +23,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-open-feature-env-var = "0.1.0"
+open-feature-env-var = "0.2"
 ```
 
 ## Example
@@ -36,7 +36,7 @@ api.set_provider(provider).await;
 let client = api.create_named_client("env-var-client");
 
 let mut message =  "Hello rustaceans!";
-let is_feature_enabled = client.get_bool_value("env-flag-key", &EvaluationContext::default(), None).await.unwrap_or(false);
+let is_feature_enabled = client.get_bool_value("env-flag-key", None, None).await.unwrap_or(false);
 
 if is_feature_enabled {
     message = "Hello rustaceans from feature flag!";
