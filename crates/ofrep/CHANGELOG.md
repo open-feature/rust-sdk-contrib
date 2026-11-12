@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-ofrep-v0.1.2...open-feature-ofrep-v0.1.3) (2026-11-12)
+
+
+### 🐛 Bug Fixes
+
+* **ofrep:** honour response statuses, rate limits and evaluation details ([#183](https://github.com/open-feature/rust-sdk-contrib/issues/183)) ([dc8262f](https://github.com/open-feature/rust-sdk-contrib/commit/dc8262fbe2eb7bed50a4033d30334b9800db88e1))
+
 ## [0.1.2](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-ofrep-v0.1.1...open-feature-ofrep-v0.1.2) (2026-07-30)
 
 

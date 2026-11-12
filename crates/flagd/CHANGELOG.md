@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.3.1](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagd-v0.3.0...open-feature-flagd-v0.3.1) (2026-11-12)
+
+
+### 🧹 Chore
+
+* **deps:** update dependency crates/flagd/flagd-testbed to v3.11.0 ([#187](https://github.com/open-feature/rust-sdk-contrib/issues/187)) ([ad70210](https://github.com/open-feature/rust-sdk-contrib/commit/ad7021064ecb69a82819b20306fabca2ecd27cf0))
+* **deps:** update rust crate lru to 0.19 ([#176](https://github.com/open-feature/rust-sdk-contrib/issues/176)) ([a1ce989](https://github.com/open-feature/rust-sdk-contrib/commit/a1ce98935c837af72ce73bd2a640522c8e0a7301))
+* **deps:** update rust crate testcontainers to 0.28 ([#156](https://github.com/open-feature/rust-sdk-contrib/issues/156)) ([7832ff3](https://github.com/open-feature/rust-sdk-contrib/commit/7832ff389a49e8d233e196aade633bc082dd9649))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * open-feature-ofrep bumped from 0.1.2 to 0.1.3
+
 ## [0.3.0](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagd-v0.2.2...open-feature-flagd-v0.3.0) (2026-10-15)
 
 
