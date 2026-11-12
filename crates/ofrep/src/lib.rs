@@ -50,6 +50,12 @@
 //! | headers                                 | HeaderMap                         | Empty Map                           |
 //! | connect_timeout                         | Duration                          | 10 seconds                          |
 //!
+//! ### Code defaults
+//! An OFREP server can answer with an evaluation that has no `value`, deferring to the default
+//! value in the application code. `FeatureProvider` methods never receive that default, so the
+//! provider returns an error with code `General("Code default")`; fall back to your default value
+//! on errors as usual.
+//!
 //! ### License
 //! Apache 2.0 - See [LICENSE](./../../LICENSE) for more information.
 
