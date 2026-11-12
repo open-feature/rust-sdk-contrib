@@ -31,15 +31,8 @@ jobs:
       - name: Install Rust
         run: rustup update --no-self-update stable && rustup default stable
 
-      - name: Install cargo-msrv and cargo-readme
-        working-directory: crates/flagd
-        run: |
-          cargo install cargo-msrv --locked
-          cargo install cargo-readme
-
-      - name: Verify Minimum Supported Rust Version
-        working-directory: crates/flagd
-        run: cargo msrv verify
+      - name: Install cargo-readme
+        run: cargo install cargo-readme
 
       - name: Check README is up-to-date
         working-directory: crates/flagd

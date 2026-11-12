@@ -7,7 +7,7 @@ license = "Apache-2.0"
 repository = "https://github.com/open-feature/rust-sdk-contrib"
 version = "0.1.2"
 edition = "2024"
-rust-version = "1.85.1"
+rust-version = "1.88" # MSRV
 
 [dev-dependencies]
 wiremock = "0.6.5"

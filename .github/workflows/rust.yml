@@ -58,6 +58,35 @@ jobs:
           cargo test --workspace --verbose
         fi
 
+  msrv:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          submodules: recursive
+
+      - name: Install protobuf compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Install Rust
+        run: rustup update --no-self-update stable && rustup default stable
+
+      - name: Install cargo-hack
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39
+        with:
+          tool: cargo-hack
+
+      - name: Setup cache
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4
+
+      # Checks every published crate with the toolchain its `rust-version` names. Runs on every
+      # change, since a dependency or workspace update can raise the effective MSRV of any crate.
+      - name: Verify Minimum Supported Rust Versions
+        run: cargo hack check --rust-version --workspace --all-features --exclude open-feature-contrib
+
   lint:
     runs-on: ubuntu-latest
 
