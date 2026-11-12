@@ -194,7 +194,8 @@ Configurations can be provided as constructor options or via environment variabl
 | Option                                  | Env Variable                            | Type / Supported Value            | Default                             | Compatible Resolver            |
 |-----------------------------------------|-----------------------------------------|-----------------------------------|-------------------------------------|--------------------------------|
 | Host                                    | FLAGD_HOST                              | string                            | "localhost"                         | RPC, REST, In-Process, File    |
-| Port                                    | FLAGD_PORT                              | number                            | 8013 (RPC), 8016 (REST)             | RPC, REST, In-Process, File    |
+| Port                                    | FLAGD_PORT                              | number                            | 8013 (RPC), 8015 (In-Process), 8016 (REST) | RPC, REST, In-Process, File    |
+| Sync Port (takes priority over FLAGD_PORT) | FLAGD_SYNC_PORT                      | number                            | 8015                                | In-Process                     |
 | Target URI                              | FLAGD_TARGET_URI                        | string                            | ""                                  | RPC, In-Process                |
 | TLS                                     | FLAGD_TLS                               | boolean                           | false                               | RPC, In-Process                |
 | Socket Path                             | FLAGD_SOCKET_PATH                       | string                            | ""                                  | RPC                            |
@@ -204,8 +205,8 @@ Configurations can be provided as constructor options or via environment variabl
 | Max Cache Size                          | FLAGD_MAX_CACHE_SIZE                    | number                            | 1000                                | RPC, In-Process, File          |
 | Offline File Path                       | FLAGD_OFFLINE_FLAG_SOURCE_PATH          | string                            | ""                                  | File                           |
 | Retry Backoff (ms)                      | FLAGD_RETRY_BACKOFF_MS                  | number                            | 1000                                | RPC, In-Process                |
-| Retry Backoff Maximum (ms)              | FLAGD_RETRY_BACKOFF_MAX_MS              | number                            | 120000                              | RPC, In-Process                |
-| Retry Grace Period                      | FLAGD_RETRY_GRACE_PERIOD                | number                            | 5                                   | RPC, In-Process                |
+| Retry Backoff Maximum (ms)              | FLAGD_RETRY_BACKOFF_MAX_MS              | number                            | 5000                                | RPC, In-Process                |
+| Retry Grace Period                      | FLAGD_RETRY_GRACE_PERIOD                | number                            | 10                                  | RPC, In-Process                |
 | Event Stream Deadline (ms)              | FLAGD_STREAM_DEADLINE_MS                | number                            | 600000                              | RPC                            |
 | Offline Poll Interval (ms)              | FLAGD_OFFLINE_POLL_MS                   | number                            | 5000                                | File                           |
 | Source Selector                         | FLAGD_SOURCE_SELECTOR                   | string                            | ""                                  | In-Process                     |
