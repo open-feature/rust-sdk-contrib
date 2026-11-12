@@ -17,7 +17,7 @@
 [submodule "crates/flagd/flagd-testbed"]
 	path = crates/flagd/flagd-testbed
 	url = https://github.com/open-feature/flagd-testbed.git
-	branch = v2.14.0
+	branch = v3.10.3
 [submodule "crates/flagd/schemas"]
 	path = crates/flagd/schemas
 	url = https://github.com/open-feature/flagd-schemas
