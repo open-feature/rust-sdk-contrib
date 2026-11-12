@@ -46,7 +46,7 @@ tonic-prost-build = { workspace = true }
 [dev-dependencies]
 cucumber = "0.23"
 futures-core = "0.3"
-testcontainers = { version = "0.27", features = ["http_wait", "blocking"] }
+testcontainers = { version = "0.28", features = ["http_wait", "blocking"] }
 # Force time >=0.3.47 to fix RUSTSEC-2026-0009
 time = ">=0.3.47"
 wiremock = "0.6.5"
