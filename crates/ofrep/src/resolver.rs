@@ -1,13 +1,12 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
-use once_cell::sync::Lazy;
 use open_feature::provider::{FeatureProvider, ProviderMetadata, ResolutionDetails};
 use open_feature::{
     EvaluationContext, EvaluationContextFieldValue, EvaluationError, EvaluationErrorCode,
-    EvaluationResult, StructValue, Value,
+    EvaluationReason, EvaluationResult, FlagMetadata, StructValue, Value,
 };
 use reqwest::header::RETRY_AFTER;
-use reqwest::{Certificate, Client, StatusCode};
+use reqwest::{Certificate, Client, StatusCode, redirect};
 use std::any;
 use tokio::sync::Mutex;
 use tracing::{debug, error, instrument};
@@ -15,13 +14,13 @@ use url::Url;
 
 use crate::{OfrepError, OfrepOptions};
 
-static CURRENT_RETRY_AFTER: Lazy<Mutex<DateTime<Utc>>> = Lazy::new(|| Mutex::new(Utc::now()));
-
 #[derive(Debug)]
 pub struct Resolver {
     base_url: String,
     metadata: ProviderMetadata,
     client: Client,
+    /// The time until which this provider's OFREP server asked it to wait.
+    retry_after: Mutex<DateTime<Utc>>,
 }
 
 impl Resolver {
@@ -30,13 +29,17 @@ impl Resolver {
             base_url: options.base_url.clone(),
             metadata: ProviderMetadata::new("ofrep"),
             client: Self::build_client(options)?,
+            retry_after: Mutex::new(Utc::now()),
         })
     }
 
     fn build_client(options: &OfrepOptions) -> Result<Client, OfrepError> {
+        // A redirect would send the evaluation context to another origin, so it is reported as an
+        // unexpected status instead of being followed.
         let mut client_builder = Client::builder()
             .default_headers(options.headers.clone())
-            .connect_timeout(options.connect_timeout);
+            .connect_timeout(options.connect_timeout)
+            .redirect(redirect::Policy::none());
 
         let url = Url::parse(&options.base_url).map_err(|e| {
             OfrepError::Config(format!("Invalid base url: '{}' ({})", options.base_url, e))
@@ -62,33 +65,32 @@ impl Resolver {
             .map_err(|e| OfrepError::Config(format!("Failed to build HTTP client: {}", e)))
     }
 
-    async fn parse_retry_after(retry_after: &str) -> DateTime<Utc> {
+    /// The time a Retry-After header names, as delay seconds or an HTTP date. A delay too large
+    /// to represent waits until the latest representable time.
+    fn parse_retry_after(retry_after: &str) -> DateTime<Utc> {
         let now = Utc::now();
+        let retry_after = retry_after.trim();
 
-        if retry_after.trim().is_empty() {
-            return now;
+        if let Ok(seconds) = retry_after.parse::<i64>() {
+            return Duration::try_seconds(seconds.max(0))
+                .and_then(|delay| now.checked_add_signed(delay))
+                .unwrap_or(DateTime::<Utc>::MAX_UTC);
         }
 
-        if let Ok(seconds) = retry_after.trim().parse::<i64>() {
-            return now + Duration::seconds(seconds);
+        if let Ok(date) = DateTime::parse_from_rfc2822(retry_after) {
+            return date.with_timezone(&Utc);
         }
 
-        if let Ok(parsed_date) = retry_after.trim().parse::<DateTime<Utc>>() {
-            return parsed_date.with_timezone(&Utc);
+        if let Ok(date) = retry_after.parse::<DateTime<Utc>>() {
+            return date;
         }
 
         debug!("Failed to parse Retry-After header : {}", retry_after);
         now
     }
 
-    async fn update_retry_after(new_retry_after: DateTime<Utc>) {
-        let mut retry_after = CURRENT_RETRY_AFTER.lock().await;
-        *retry_after = new_retry_after;
-    }
-
-    async fn is_rate_limit_exceeded() -> bool {
-        let retry_after = CURRENT_RETRY_AFTER.lock().await;
-        Utc::now() < *retry_after
+    async fn is_rate_limit_exceeded(&self) -> bool {
+        Utc::now() < *self.retry_after.lock().await
     }
 
     #[instrument(skip(self, evaluation_context), fields(flag_key = %flag_key))]
@@ -98,7 +100,7 @@ impl Resolver {
         evaluation_context: &EvaluationContext,
         convertor: fn(serde_json::Value) -> Option<T>,
     ) -> EvaluationResult<ResolutionDetails<T>> {
-        if Resolver::is_rate_limit_exceeded().await {
+        if self.is_rate_limit_exceeded().await {
             return Err(EvaluationError {
                 code: EvaluationErrorCode::General("Rate limit exceeded".to_string()),
                 message: Some(
@@ -162,23 +164,21 @@ impl Resolver {
                     .get(RETRY_AFTER)
                     .and_then(|value| value.to_str().ok());
 
-                if let Some(header_retry_after) = header_retry_after {
-                    let new_retry_after: DateTime<Utc> =
-                        Resolver::parse_retry_after(header_retry_after).await;
-                    Resolver::update_retry_after(new_retry_after).await;
-                } else {
-                    debug!("Couldn't parse the retry-after header.");
-                    let mut retry_after = CURRENT_RETRY_AFTER.lock().await;
-                    *retry_after = Utc::now();
-                }
+                let mut retry_after = self.retry_after.lock().await;
+                *retry_after = match header_retry_after {
+                    Some(header_retry_after) => Resolver::parse_retry_after(header_retry_after),
+                    None => {
+                        debug!("Couldn't parse the retry-after header.");
+                        Utc::now()
+                    }
+                };
 
-                let retry_after = CURRENT_RETRY_AFTER.lock().await;
                 return Err(EvaluationError {
                     code: EvaluationErrorCode::General("Rate limit exceeded".to_string()),
                     message: Some(format!("Rate limit exceeded. Retry after {}", *retry_after)),
                 });
             }
-            _ => {
+            StatusCode::OK => {
                 let result = response.json::<serde_json::Value>().await.map_err(|e| {
                     error!(error = %e, "Failed to parse {} response", any::type_name::<T>());
                     EvaluationError {
@@ -198,12 +198,55 @@ impl Resolver {
                 Ok(ResolutionDetails {
                     value,
                     variant: result["variant"].as_str().map(String::from),
-                    reason: Some(open_feature::EvaluationReason::Static),
-                    flag_metadata: Default::default(),
+                    reason: result["reason"].as_str().map(reason_from_str),
+                    flag_metadata: metadata_from_json(&result["metadata"]),
                 })
             }
+            status => Err(EvaluationError {
+                code: EvaluationErrorCode::General(format!("Unexpected response status {status}")),
+                message: Some(format!(
+                    "The OFREP server answered {status} instead of a flag evaluation"
+                )),
+            }),
         }
     }
+}
+
+/// The evaluation reason an OFREP response names.
+fn reason_from_str(reason: &str) -> EvaluationReason {
+    match reason {
+        "STATIC" => EvaluationReason::Static,
+        "DEFAULT" => EvaluationReason::Default,
+        "TARGETING_MATCH" => EvaluationReason::TargetingMatch,
+        "SPLIT" => EvaluationReason::Split,
+        "CACHED" => EvaluationReason::Cached,
+        "DISABLED" => EvaluationReason::Disabled,
+        "UNKNOWN" => EvaluationReason::Unknown,
+        "ERROR" => EvaluationReason::Error,
+        other => EvaluationReason::Other(other.to_string()),
+    }
+}
+
+/// The flag metadata of an OFREP response: its boolean, number and string fields.
+fn metadata_from_json(metadata: &serde_json::Value) -> Option<FlagMetadata> {
+    let metadata = metadata.as_object()?;
+    let mut flag_metadata = FlagMetadata::default();
+    for (key, value) in metadata {
+        match value {
+            serde_json::Value::Bool(value) => flag_metadata.add_value(key, *value),
+            serde_json::Value::Number(number) => match number.as_i64() {
+                Some(value) => flag_metadata.add_value(key, value),
+                None => {
+                    if let Some(value) = number.as_f64() {
+                        flag_metadata.add_value(key, value);
+                    }
+                }
+            },
+            serde_json::Value::String(value) => flag_metadata.add_value(key, value.as_str()),
+            _ => {}
+        }
+    }
+    Some(flag_metadata)
 }
 
 #[async_trait]
@@ -331,16 +374,12 @@ impl IntoFeatureValue for serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use open_feature::FlagMetadataValue;
     use serde_json::json;
     use test_log::test;
     use tokio::time::{Duration, sleep};
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
-
-    async fn reset_states() {
-        let mut retry_after = CURRENT_RETRY_AFTER.lock().await;
-        *retry_after = Utc::now();
-    }
 
     async fn setup_mock_server() -> (MockServer, Resolver) {
         let mock_server = MockServer::start().await;
@@ -394,7 +433,6 @@ mod tests {
     #[test(tokio::test)]
     #[serial_test::serial]
     async fn test_resolve_bool_value() {
-        reset_states().await;
         let (mock_server, resolver) = setup_mock_server().await;
 
         Mock::given(method("POST"))
@@ -421,7 +459,6 @@ mod tests {
     #[test(tokio::test)]
     #[serial_test::serial]
     async fn test_resolve_string_value() {
-        reset_states().await;
         let (mock_server, resolver) = setup_mock_server().await;
 
         Mock::given(method("POST"))
@@ -448,7 +485,6 @@ mod tests {
     #[test(tokio::test)]
     #[serial_test::serial]
     async fn test_resolve_float_value() {
-        reset_states().await;
         let (mock_server, resolver) = setup_mock_server().await;
 
         Mock::given(method("POST"))
@@ -475,7 +511,6 @@ mod tests {
     #[test(tokio::test)]
     #[serial_test::serial]
     async fn test_resolve_int_value() {
-        reset_states().await;
         let (mock_server, resolver) = setup_mock_server().await;
 
         Mock::given(method("POST"))
@@ -502,7 +537,6 @@ mod tests {
     #[test(tokio::test)]
     #[serial_test::serial]
     async fn test_resolve_struct_value() {
-        reset_states().await;
         let (mock_server, resolver) = setup_mock_server().await;
 
         Mock::given(method("POST"))
@@ -549,7 +583,6 @@ mod tests {
     #[test(tokio::test)]
     #[serial_test::serial]
     async fn test_error_400() {
-        reset_states().await;
         let (mock_server, resolver) = setup_mock_server().await;
 
         Mock::given(method("POST"))
@@ -596,7 +629,6 @@ mod tests {
     #[test(tokio::test)]
     #[serial_test::serial]
     async fn test_error_401() {
-        reset_states().await;
         let (mock_server, resolver) = setup_mock_server().await;
 
         Mock::given(method("POST"))
@@ -644,7 +676,6 @@ mod tests {
     #[test(tokio::test)]
     #[serial_test::serial]
     async fn test_error_403() {
-        reset_states().await;
         let (mock_server, resolver) = setup_mock_server().await;
 
         Mock::given(method("POST"))
@@ -692,7 +723,6 @@ mod tests {
     #[test(tokio::test)]
     #[serial_test::serial]
     async fn test_error_404() {
-        reset_states().await;
         let (mock_server, resolver) = setup_mock_server().await;
 
         Mock::given(method("POST"))
@@ -754,7 +784,6 @@ mod tests {
     #[test(tokio::test)]
     #[serial_test::serial]
     async fn test_error_429() {
-        reset_states().await;
         let (mock_server, resolver) = setup_mock_server().await;
 
         Mock::given(method("POST"))
@@ -811,6 +840,169 @@ mod tests {
                 .message
                 .unwrap()
                 .starts_with("Rate limit exceeded. Retry after")
+        );
+    }
+
+    #[test(tokio::test)]
+    async fn test_reason_and_metadata_come_from_the_response() {
+        let (mock_server, resolver) = setup_mock_server().await;
+
+        Mock::given(method("POST"))
+            .and(path("/ofrep/v1/evaluate/flags/test-flag"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "value": true,
+                "variant": "on",
+                "reason": "TARGETING_MATCH",
+                "metadata": {"revision": 7, "ratio": 0.5, "owner": "team", "stable": true}
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let context = EvaluationContext::default();
+        let result = resolver
+            .resolve_bool_value("test-flag", &context)
+            .await
+            .unwrap();
+
+        assert_eq!(result.reason, Some(EvaluationReason::TargetingMatch));
+        let metadata = result.flag_metadata.unwrap().values;
+        assert_eq!(metadata.get("revision"), Some(&FlagMetadataValue::Int(7)));
+        assert_eq!(metadata.get("ratio"), Some(&FlagMetadataValue::Float(0.5)));
+        assert_eq!(
+            metadata.get("owner"),
+            Some(&FlagMetadataValue::String("team".to_string()))
+        );
+        assert_eq!(metadata.get("stable"), Some(&FlagMetadataValue::Bool(true)));
+    }
+
+    #[test(tokio::test)]
+    async fn test_server_error_with_a_valid_body_is_an_error() {
+        let (mock_server, resolver) = setup_mock_server().await;
+
+        Mock::given(method("POST"))
+            .and(path("/ofrep/v1/evaluate/flags/test-flag"))
+            .respond_with(ResponseTemplate::new(500).set_body_json(json!({
+                "value": true,
+                "reason": "STATIC"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let context = EvaluationContext::default();
+        let error = resolver
+            .resolve_bool_value("test-flag", &context)
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            error.code,
+            EvaluationErrorCode::General(
+                "Unexpected response status 500 Internal Server Error".to_string()
+            )
+        );
+    }
+
+    #[test(tokio::test)]
+    async fn test_redirect_to_another_origin_is_not_followed() {
+        let (mock_server, resolver) = setup_mock_server().await;
+        let other_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/ofrep/v1/evaluate/flags/test-flag"))
+            .respond_with(ResponseTemplate::new(307).insert_header(
+                "Location",
+                format!("{}/ofrep/v1/evaluate/flags/test-flag", other_server.uri()),
+            ))
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"value": true})))
+            .expect(0)
+            .mount(&other_server)
+            .await;
+
+        let context = EvaluationContext::default().with_targeting_key("test-user");
+        let error = resolver
+            .resolve_bool_value("test-flag", &context)
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            error.code,
+            EvaluationErrorCode::General(
+                "Unexpected response status 307 Temporary Redirect".to_string()
+            )
+        );
+        other_server.verify().await;
+    }
+
+    #[test(tokio::test)]
+    async fn test_huge_retry_after_is_a_rate_limit_not_a_panic() {
+        let (mock_server, resolver) = setup_mock_server().await;
+
+        Mock::given(method("POST"))
+            .and(path("/ofrep/v1/evaluate/flags/test-flag"))
+            .respond_with(
+                ResponseTemplate::new(429).insert_header("Retry-After", i64::MAX.to_string()),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let context = EvaluationContext::default();
+        let first = resolver.resolve_bool_value("test-flag", &context).await;
+        let second = resolver.resolve_bool_value("test-flag", &context).await;
+
+        assert_eq!(
+            first.unwrap_err().code,
+            EvaluationErrorCode::General("Rate limit exceeded".to_string())
+        );
+        assert_eq!(
+            second.unwrap_err().message.unwrap(),
+            "Rate limit exceeded. Please wait before making another request."
+        );
+    }
+
+    #[test(tokio::test)]
+    async fn test_rate_limit_of_one_provider_leaves_another_alone() {
+        let (limited_server, limited) = setup_mock_server().await;
+        let (healthy_server, healthy) = setup_mock_server().await;
+
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(429).insert_header("Retry-After", "30"))
+            .mount(&limited_server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/ofrep/v1/evaluate/flags/test-flag"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "value": true,
+                "reason": "STATIC"
+            })))
+            .expect(1)
+            .mount(&healthy_server)
+            .await;
+
+        let context = EvaluationContext::default();
+        assert!(
+            limited
+                .resolve_bool_value("test-flag", &context)
+                .await
+                .is_err()
+        );
+        let result = healthy
+            .resolve_bool_value("test-flag", &context)
+            .await
+            .unwrap();
+
+        assert!(result.value);
+        healthy_server.verify().await;
+    }
+
+    #[test]
+    fn test_retry_after_accepts_an_http_date() {
+        let retry_after = Resolver::parse_retry_after("Wed, 21 Oct 2099 07:28:00 GMT");
+        assert_eq!(
+            retry_after,
+            DateTime::parse_from_rfc3339("2099-10-21T07:28:00Z").unwrap()
         );
     }
 }
