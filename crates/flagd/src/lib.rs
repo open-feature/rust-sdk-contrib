@@ -194,7 +194,8 @@
 //! | Option                                  | Env Variable                            | Type / Supported Value            | Default                             | Compatible Resolver            |
 //! |-----------------------------------------|-----------------------------------------|-----------------------------------|-------------------------------------|--------------------------------|
 //! | Host                                    | FLAGD_HOST                              | string                            | "localhost"                         | RPC, REST, In-Process, File    |
-//! | Port                                    | FLAGD_PORT                              | number                            | 8013 (RPC), 8016 (REST)             | RPC, REST, In-Process, File    |
+//! | Port                                    | FLAGD_PORT                              | number                            | 8013 (RPC), 8015 (In-Process), 8016 (REST) | RPC, REST, In-Process, File    |
+//! | Sync Port (takes priority over FLAGD_PORT) | FLAGD_SYNC_PORT                      | number                            | 8015                                | In-Process                     |
 //! | Target URI                              | FLAGD_TARGET_URI                        | string                            | ""                                  | RPC, In-Process                |
 //! | TLS                                     | FLAGD_TLS                               | boolean                           | false                               | RPC, In-Process                |
 //! | Socket Path                             | FLAGD_SOCKET_PATH                       | string                            | ""                                  | RPC                            |
@@ -204,8 +205,8 @@
 //! | Max Cache Size                          | FLAGD_MAX_CACHE_SIZE                    | number                            | 1000                                | RPC, In-Process, File          |
 //! | Offline File Path                       | FLAGD_OFFLINE_FLAG_SOURCE_PATH          | string                            | ""                                  | File                           |
 //! | Retry Backoff (ms)                      | FLAGD_RETRY_BACKOFF_MS                  | number                            | 1000                                | RPC, In-Process                |
-//! | Retry Backoff Maximum (ms)              | FLAGD_RETRY_BACKOFF_MAX_MS              | number                            | 120000                              | RPC, In-Process                |
-//! | Retry Grace Period                      | FLAGD_RETRY_GRACE_PERIOD                | number                            | 5                                   | RPC, In-Process                |
+//! | Retry Backoff Maximum (ms)              | FLAGD_RETRY_BACKOFF_MAX_MS              | number                            | 5000                                | RPC, In-Process                |
+//! | Retry Grace Period                      | FLAGD_RETRY_GRACE_PERIOD                | number                            | 10                                  | RPC, In-Process                |
 //! | Event Stream Deadline (ms)              | FLAGD_STREAM_DEADLINE_MS                | number                            | 600000                              | RPC                            |
 //! | Offline Poll Interval (ms)              | FLAGD_OFFLINE_POLL_MS                   | number                            | 5000                                | File                           |
 //! | Source Selector                         | FLAGD_SOURCE_SELECTOR                   | string                            | ""                                  | In-Process                     |
@@ -284,10 +285,10 @@ pub struct FlagdOptions {
     /// Initial backoff duration in milliseconds for retry attempts (default: 1000ms)
     /// Not supported in OFREP (REST) evaluation
     pub retry_backoff_ms: u32,
-    /// Maximum backoff duration in milliseconds for retry attempts, prevents exponential backoff from growing indefinitely (default: 120000ms)
+    /// Maximum backoff duration in milliseconds for retry attempts, prevents exponential backoff from growing indefinitely (default: 5000ms)
     /// Not supported in OFREP (REST) evaluation
     pub retry_backoff_max_ms: u32,
-    /// Maximum number of retry attempts before giving up (default: 5)
+    /// Maximum number of retry attempts before giving up (default: 10)
     /// Not supported in OFREP (REST) evaluation
     pub retry_grace_period: u32,
     /// Source selector for filtering flag configurations
@@ -337,10 +338,7 @@ impl Default for FlagdOptions {
         #[allow(unused_mut)]
         let mut options = Self {
             host: std::env::var("FLAGD_HOST").unwrap_or_else(|_| "localhost".to_string()),
-            port: std::env::var("FLAGD_PORT")
-                .ok()
-                .and_then(|p| p.parse().ok())
-                .unwrap_or(port),
+            port,
             target_uri: std::env::var("FLAGD_TARGET_URI").ok(),
             resolver_type,
             tls: std::env::var("FLAGD_TLS")
@@ -358,11 +356,11 @@ impl Default for FlagdOptions {
             retry_backoff_max_ms: std::env::var("FLAGD_RETRY_BACKOFF_MAX_MS")
                 .ok()
                 .and_then(|v| v.parse().ok())
-                .unwrap_or(120000),
+                .unwrap_or(5000),
             retry_grace_period: std::env::var("FLAGD_RETRY_GRACE_PERIOD")
                 .ok()
                 .and_then(|v| v.parse().ok())
-                .unwrap_or(5),
+                .unwrap_or(10),
             stream_deadline_ms: std::env::var("FLAGD_STREAM_DEADLINE_MS")
                 .ok()
                 .and_then(|v| v.parse().ok())
@@ -430,7 +428,21 @@ impl FlagdOptions {
         compile_error!("At least one resolver feature must be enabled: rpc, rest, or in-process");
     }
 
-    fn default_port(resolver_type: &ResolverType) -> u16 {
+    /// Default port for `resolver_type`, honouring the environment.
+    ///
+    /// In-process reads `FLAGD_SYNC_PORT` first, then the legacy `FLAGD_PORT`; other resolvers
+    /// read `FLAGD_PORT`. Useful when overriding `resolver_type` on top of `FlagdOptions::default()`.
+    pub fn default_port(resolver_type: &ResolverType) -> u16 {
+        let env_port = |name: &str| std::env::var(name).ok().and_then(|p| p.parse().ok());
+        #[cfg(feature = "in-process")]
+        if *resolver_type == ResolverType::InProcess
+            && let Some(port) = env_port("FLAGD_SYNC_PORT")
+        {
+            return port;
+        }
+        if let Some(port) = env_port("FLAGD_PORT") {
+            return port;
+        }
         match resolver_type {
             #[cfg(feature = "rpc")]
             ResolverType::Rpc => 8013,

@@ -208,6 +208,30 @@ const EVALUATION_FLAGS: &str = r#"{
           "special"
         ]
       }
+    },
+    "large-integer-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "one": 1,
+        "max-int32": 2147483647
+      },
+      "defaultVariant": "max-int32"
+    },
+    "huge-integer-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "one": 1,
+        "max-safe": 9007199254740991
+      },
+      "defaultVariant": "max-safe"
+    },
+    "integral-float-flag": {
+      "state": "ENABLED",
+      "variants": {
+        "tenth": 0.1,
+        "ten": 10.0
+      },
+      "defaultVariant": "ten"
     }
   },
   "$evaluators": {
@@ -713,6 +737,11 @@ async fn evaluation_test() {
                 world.clear().await;
             })
         })
-        .run(feature_path)
+        // `@no-default-variant` expects the caller's code default with reason DEFAULT, but
+        // `FeatureProvider::resolve_*` never receives the code default and must return a value.
+        // The deprecated `@no-default` suite covers the FLAG_NOT_FOUND fallback instead.
+        .filter_run_and_exit(feature_path, |_feature, _rule, scenario| {
+            !scenario.tags.iter().any(|tag| tag == "no-default-variant")
+        })
         .await;
 }
