@@ -26,9 +26,9 @@ impl ConfigWorld {
         // SAFETY: Removing environment variables is safe here because:
         // 1. The test is protected by #[serial_test::serial]
         // 2. This prevents test pollution between scenarios
-        // 3. We clear env vars that were set in previous scenarios
+        // 3. We clear env vars that were set by this scenario once it finishes
 
-        // Clear env vars that were set in the previous scenario
+        // Clear env vars that were set by this scenario
         for key in self.env_vars.keys() {
             unsafe {
                 std::env::remove_var(key);
@@ -101,7 +101,7 @@ async fn env_with_value(world: &mut ConfigWorld, env: String, value: String) {
 
     // SAFETY: Setting environment variables is safe here because:
     // 1. The test function is annotated with #[serial_test::serial], ensuring no parallel execution
-    // 2. ConfigWorld::clear() is called before each scenario to clean up all env vars
+    // 2. ConfigWorld::clear() is called after each scenario to clean up all env vars
     // 3. All env vars set during the test are tracked in world.env_vars for guaranteed cleanup
     //
     // Note: We cannot use temp-env here because it only sets variables within a closure scope,
@@ -129,12 +129,7 @@ async fn initialize_config(world: &mut ConfigWorld) {
             _ => ResolverType::Rpc,
         };
         resolver_explicitly_set = true;
-        // Update port based on resolver type when set via env var
-        options.port = match options.resolver_type {
-            ResolverType::Rpc => 8013,
-            ResolverType::InProcess => 8015,
-            _ => options.port,
-        };
+        options.port = FlagdOptions::default_port(&options.resolver_type);
     }
 
     // Handle explicit options - these override env vars
@@ -147,12 +142,7 @@ async fn initialize_config(world: &mut ConfigWorld) {
             _ => ResolverType::Rpc,
         };
         resolver_explicitly_set = true;
-        // Update port based on resolver type when explicitly set
-        options.port = match options.resolver_type {
-            ResolverType::Rpc => 8013,
-            ResolverType::InProcess => 8015,
-            _ => options.port,
-        };
+        options.port = FlagdOptions::default_port(&options.resolver_type);
     }
 
     // Handle source configuration - may override resolver type for backwards compatibility
@@ -329,11 +319,17 @@ async fn config_test() {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
     let feature_path = format!("{}/flagd-testbed/gherkin/config.feature", manifest_dir);
     ConfigWorld::cucumber()
-        .before(|_feature, _rule, _scenario, world| {
+        // Scenarios mutate process-wide environment variables, so they must not overlap.
+        .max_concurrent_scenarios(1)
+        // Each scenario gets a fresh world, so env vars must be removed after it, not before
+        // the next one.
+        .after(|_feature, _rule, _scenario, _event, world| {
             Box::pin(async move {
-                world.clear();
+                if let Some(world) = world {
+                    world.clear();
+                }
             })
         })
-        .run(feature_path)
+        .run_and_exit(feature_path)
         .await;
 }

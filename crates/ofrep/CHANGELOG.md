@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.3](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-ofrep-v0.1.2...open-feature-ofrep-v0.1.3) (2026-11-17)
+
+
+### 🐛 Bug Fixes
+
+* declare MSRV 1.88 for all crates and verify every crate in CI ([#189](https://github.com/open-feature/rust-sdk-contrib/issues/189)) ([6a759c7](https://github.com/open-feature/rust-sdk-contrib/commit/6a759c77a2ecc50ec456f791241e0c01f026c60f))
+* **ofrep:** honour response statuses, rate limits and evaluation details ([#183](https://github.com/open-feature/rust-sdk-contrib/issues/183)) ([dc8262f](https://github.com/open-feature/rust-sdk-contrib/commit/dc8262fbe2eb7bed50a4033d30334b9800db88e1))
+* **ofrep:** map OFREP error bodies, code defaults and type mismatches ([#190](https://github.com/open-feature/rust-sdk-contrib/issues/190)) ([588c2f8](https://github.com/open-feature/rust-sdk-contrib/commit/588c2f874e80d879a256a4ecb0f3fd6cae42a99d))
+
 ## [0.1.2](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-ofrep-v0.1.1...open-feature-ofrep-v0.1.2) (2026-07-30)
 
 
