@@ -139,9 +139,21 @@ impl Resolver {
 
         match response.status() {
             StatusCode::BAD_REQUEST => {
+                let body = error_body(response).await;
+                let details = body["errorDetails"].as_str().map(String::from);
+                let code = match body["errorCode"].as_str() {
+                    Some("PARSE_ERROR") => EvaluationErrorCode::ParseError,
+                    Some("TARGETING_KEY_MISSING") => EvaluationErrorCode::TargetingKeyMissing,
+                    Some("INVALID_CONTEXT") | None => EvaluationErrorCode::InvalidContext,
+                    Some(_) => EvaluationErrorCode::General("Bad evaluation request".to_string()),
+                };
+                let message = details.unwrap_or_else(|| match code {
+                    EvaluationErrorCode::InvalidContext => "Invalid context".to_string(),
+                    _ => "Bad evaluation request".to_string(),
+                });
                 return Err(EvaluationError {
-                    code: EvaluationErrorCode::InvalidContext,
-                    message: Some("Invalid context".to_string()),
+                    code,
+                    message: Some(message),
                 });
             }
             StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
@@ -153,9 +165,15 @@ impl Resolver {
                 });
             }
             StatusCode::NOT_FOUND => {
+                let body = error_body(response).await;
                 return Err(EvaluationError {
                     code: EvaluationErrorCode::FlagNotFound,
-                    message: Some(format!("Flag: {flag_key} not found")),
+                    message: Some(
+                        body["errorDetails"]
+                            .as_str()
+                            .map(String::from)
+                            .unwrap_or_else(|| format!("Flag: {flag_key} not found")),
+                    ),
                 });
             }
             StatusCode::TOO_MANY_REQUESTS => {
@@ -186,11 +204,32 @@ impl Resolver {
                         message: Some(e.to_string()),
                     }
                 })?;
-                let value = convertor(result["value"].clone()).ok_or_else(|| {
+                let Some(raw_value) = result.as_object().map(|body| body.get("value")) else {
+                    error!("OFREP response is not a JSON object");
+                    return Err(EvaluationError {
+                        code: EvaluationErrorCode::ParseError,
+                        message: Some("The OFREP response is not a JSON object".to_string()),
+                    });
+                };
+                // A success without a value defers to the code default. Providers never see the
+                // code default, so it reaches the caller as an error, like any other fallback.
+                let Some(raw_value) = raw_value else {
+                    debug!(reason = ?result["reason"], "Flag defers to the code default");
+                    return Err(EvaluationError {
+                        code: EvaluationErrorCode::General("Code default".to_string()),
+                        message: Some(format!(
+                            "The OFREP server deferred flag {flag_key} to the code default"
+                        )),
+                    });
+                };
+                let value = convertor(raw_value.clone()).ok_or_else(|| {
                     error!("Invalid {} value in response", any::type_name::<T>());
                     EvaluationError {
-                        code: EvaluationErrorCode::ParseError,
-                        message: Some(format!("Invalid value {}", std::any::type_name::<T>())),
+                        code: EvaluationErrorCode::TypeMismatch,
+                        message: Some(format!(
+                            "Resolved value {raw_value} is not of type {}",
+                            std::any::type_name::<T>()
+                        )),
                     }
                 })?;
 
@@ -202,14 +241,51 @@ impl Resolver {
                     flag_metadata: metadata_from_json(&result["metadata"]),
                 })
             }
-            status => Err(EvaluationError {
-                code: EvaluationErrorCode::General(format!("Unexpected response status {status}")),
-                message: Some(format!(
-                    "The OFREP server answered {status} instead of a flag evaluation"
-                )),
-            }),
+            status => {
+                let body = error_body(response).await;
+                Err(EvaluationError {
+                    code: EvaluationErrorCode::General(format!(
+                        "Unexpected response status {status}"
+                    )),
+                    message: Some(
+                        body["errorDetails"]
+                            .as_str()
+                            .map(String::from)
+                            .unwrap_or_else(|| {
+                                format!(
+                                    "The OFREP server answered {status} instead of a flag evaluation"
+                                )
+                            }),
+                    ),
+                })
+            }
         }
     }
+}
+
+/// Limits for reading the optional body of an error response, so a slow or oversized body cannot
+/// delay the fallback.
+const ERROR_BODY_MAX_BYTES: usize = 64 * 1024;
+const ERROR_BODY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// The JSON body of an OFREP error response, or `null` when it has none, is not JSON, or exceeds
+/// the size or time limit.
+async fn error_body(mut response: reqwest::Response) -> serde_json::Value {
+    let read = async {
+        let mut body = Vec::new();
+        while let Some(chunk) = response.chunk().await.ok()? {
+            if body.len() + chunk.len() > ERROR_BODY_MAX_BYTES {
+                return None;
+            }
+            body.extend_from_slice(&chunk);
+        }
+        serde_json::from_slice(&body).ok()
+    };
+    tokio::time::timeout(ERROR_BODY_TIMEOUT, read)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_default()
 }
 
 /// The evaluation reason an OFREP response names.
@@ -1004,5 +1080,201 @@ mod tests {
             retry_after,
             DateTime::parse_from_rfc3339("2099-10-21T07:28:00Z").unwrap()
         );
+    }
+
+    async fn resolve_bool_with(
+        response: ResponseTemplate,
+    ) -> EvaluationResult<ResolutionDetails<bool>> {
+        let (mock_server, resolver) = setup_mock_server().await;
+        Mock::given(method("POST"))
+            .and(path("/ofrep/v1/evaluate/flags/test-flag"))
+            .respond_with(response)
+            .mount(&mock_server)
+            .await;
+        resolver
+            .resolve_bool_value("test-flag", &EvaluationContext::default())
+            .await
+    }
+
+    #[test(tokio::test)]
+    async fn test_error_400_maps_the_error_code_of_the_body() {
+        let cases = [
+            ("PARSE_ERROR", EvaluationErrorCode::ParseError),
+            (
+                "TARGETING_KEY_MISSING",
+                EvaluationErrorCode::TargetingKeyMissing,
+            ),
+            ("INVALID_CONTEXT", EvaluationErrorCode::InvalidContext),
+            (
+                "GENERAL",
+                EvaluationErrorCode::General("Bad evaluation request".to_string()),
+            ),
+        ];
+
+        for (error_code, expected) in cases {
+            let error = resolve_bool_with(ResponseTemplate::new(400).set_body_json(json!({
+                "key": "test-flag",
+                "errorCode": error_code,
+                "errorDetails": "details from the server"
+            })))
+            .await
+            .unwrap_err();
+
+            assert_eq!(error.code, expected, "errorCode {error_code}");
+            assert_eq!(error.message.as_deref(), Some("details from the server"));
+        }
+    }
+
+    #[test(tokio::test)]
+    async fn test_error_404_and_500_report_the_error_details_of_the_body() {
+        let not_found = resolve_bool_with(ResponseTemplate::new(404).set_body_json(json!({
+            "key": "test-flag",
+            "errorCode": "FLAG_NOT_FOUND",
+            "errorDetails": "Flag 'test-flag' was not found"
+        })))
+        .await
+        .unwrap_err();
+        let server_error = resolve_bool_with(
+            ResponseTemplate::new(500)
+                .set_body_json(json!({"errorDetails": "An internal server error occurred"})),
+        )
+        .await
+        .unwrap_err();
+
+        assert_eq!(not_found.code, EvaluationErrorCode::FlagNotFound);
+        assert_eq!(
+            not_found.message.as_deref(),
+            Some("Flag 'test-flag' was not found")
+        );
+        assert_eq!(
+            server_error.message.as_deref(),
+            Some("An internal server error occurred")
+        );
+    }
+
+    #[test(tokio::test)]
+    async fn test_success_without_a_value_defers_to_the_code_default() {
+        let error = resolve_bool_with(ResponseTemplate::new(200).set_body_json(json!({
+            "key": "test-flag",
+            "reason": "DEFAULT",
+            "variant": "control"
+        })))
+        .await
+        .unwrap_err();
+
+        assert_eq!(
+            error.code,
+            EvaluationErrorCode::General("Code default".to_string())
+        );
+    }
+
+    #[test(tokio::test)]
+    async fn test_value_of_another_type_is_a_type_mismatch() {
+        let error = resolve_bool_with(ResponseTemplate::new(200).set_body_json(json!({
+            "key": "test-flag",
+            "value": "yes",
+            "reason": "STATIC"
+        })))
+        .await
+        .unwrap_err();
+
+        assert_eq!(error.code, EvaluationErrorCode::TypeMismatch);
+    }
+
+    #[test(tokio::test)]
+    async fn test_null_value_is_a_type_mismatch_not_a_code_default() {
+        let error = resolve_bool_with(
+            ResponseTemplate::new(200).set_body_json(json!({"key": "test-flag", "value": null})),
+        )
+        .await
+        .unwrap_err();
+
+        assert_eq!(error.code, EvaluationErrorCode::TypeMismatch);
+    }
+
+    #[test(tokio::test)]
+    async fn test_success_body_that_is_not_an_object_is_a_parse_error() {
+        let error = resolve_bool_with(ResponseTemplate::new(200).set_body_json(json!([true])))
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code, EvaluationErrorCode::ParseError);
+    }
+
+    #[test(tokio::test)]
+    async fn test_error_400_fallbacks() {
+        let unknown_code = resolve_bool_with(
+            ResponseTemplate::new(400).set_body_json(json!({"errorCode": "SOMETHING_NEW"})),
+        )
+        .await
+        .unwrap_err();
+        let code_without_details = resolve_bool_with(
+            ResponseTemplate::new(400).set_body_json(json!({"errorCode": "PARSE_ERROR"})),
+        )
+        .await
+        .unwrap_err();
+        let not_json = resolve_bool_with(ResponseTemplate::new(400).set_body_string("oops"))
+            .await
+            .unwrap_err();
+        let oversized = resolve_bool_with(ResponseTemplate::new(400).set_body_json(json!({
+            "errorCode": "PARSE_ERROR",
+            "errorDetails": "x".repeat(ERROR_BODY_MAX_BYTES)
+        })))
+        .await
+        .unwrap_err();
+
+        assert_eq!(
+            unknown_code.code,
+            EvaluationErrorCode::General("Bad evaluation request".to_string())
+        );
+        assert_eq!(
+            unknown_code.message.as_deref(),
+            Some("Bad evaluation request")
+        );
+        assert_eq!(code_without_details.code, EvaluationErrorCode::ParseError);
+        assert_eq!(
+            code_without_details.message.as_deref(),
+            Some("Bad evaluation request")
+        );
+        for error in [not_json, oversized] {
+            assert_eq!(error.code, EvaluationErrorCode::InvalidContext);
+            assert_eq!(error.message.as_deref(), Some("Invalid context"));
+        }
+    }
+
+    #[test(tokio::test)]
+    async fn test_stalled_error_body_does_not_delay_the_fallback() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        // Sends the status line and headers, then never finishes the announced body.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = [0u8; 4096];
+            let _ = socket.read(&mut request).await;
+            socket
+                .write_all(
+                    b"HTTP/1.1 400 Bad Request\r\ncontent-type: application/json\r\n\
+                      content-length: 1000\r\n\r\n{\"errorCode\":",
+                )
+                .await
+                .unwrap();
+            sleep(Duration::from_secs(30)).await;
+        });
+        let resolver = Resolver::new(&OfrepOptions {
+            base_url: format!("http://{address}"),
+            ..Default::default()
+        })
+        .unwrap();
+
+        let started = std::time::Instant::now();
+        let error = resolver
+            .resolve_bool_value("test-flag", &EvaluationContext::default())
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code, EvaluationErrorCode::InvalidContext);
+        assert!(started.elapsed() < Duration::from_secs(5));
     }
 }
