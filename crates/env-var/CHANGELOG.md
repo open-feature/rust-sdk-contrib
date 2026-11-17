@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-env-var-v0.2.0...open-feature-env-var-v0.2.1) (2026-11-12)
+
+
+### 🧹 Chore
+
+* **env-var:** update README for 0.2 and open-feature 0.3 ([#192](https://github.com/open-feature/rust-sdk-contrib/issues/192)) ([4b0e621](https://github.com/open-feature/rust-sdk-contrib/commit/4b0e6217e1b055e189a3548b8898dead933cc0ab))
+
 ## [0.2.0](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-env-var-v0.1.1...open-feature-env-var-v0.2.0) (2026-11-11)
 
 
