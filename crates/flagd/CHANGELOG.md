@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.0](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagd-v0.3.1...open-feature-flagd-v0.4.0) (2026-11-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* **flagd:** migrate RPC resolver to flagd.evaluation.v2 ([#179](https://github.com/open-feature/rust-sdk-contrib/issues/179))
+
+### ✨ New Features
+
+* **flagd:** migrate RPC resolver to flagd.evaluation.v2 ([#179](https://github.com/open-feature/rust-sdk-contrib/issues/179)) ([4ff3134](https://github.com/open-feature/rust-sdk-contrib/commit/4ff3134feb0ad19ca9a71be101521205df5fb110))
+
 ## [0.3.1](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagd-v0.3.0...open-feature-flagd-v0.3.1) (2026-11-17)
 
 
