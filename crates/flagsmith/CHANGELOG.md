@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagsmith-v0.1.2...open-feature-flagsmith-v0.2.0) (2026-11-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* **deps:** update rust crate open-feature to 0.3 ([#108](https://github.com/open-feature/rust-sdk-contrib/issues/108))
+
+### 🐛 Bug Fixes
+
+* declare MSRV 1.88 for all crates and verify every crate in CI ([#189](https://github.com/open-feature/rust-sdk-contrib/issues/189)) ([6a759c7](https://github.com/open-feature/rust-sdk-contrib/commit/6a759c77a2ecc50ec456f791241e0c01f026c60f))
+
+
+### 🧹 Chore
+
+* **deps:** update rust crate open-feature to 0.3 ([#108](https://github.com/open-feature/rust-sdk-contrib/issues/108)) ([788e47c](https://github.com/open-feature/rust-sdk-contrib/commit/788e47c8a5163a40102dfa8b2eb02cd2e7f86f7d))
+
 ## [0.1.2](https://github.com/open-feature/rust-sdk-contrib/compare/open-feature-flagsmith-v0.1.1...open-feature-flagsmith-v0.1.2) (2026-11-11)
 
 
