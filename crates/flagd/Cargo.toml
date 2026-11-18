@@ -16,7 +16,7 @@ ignored = ["prost", "tonic-prost"]
 
 # This is needed to reduce package size
 include = [
-    "schemas/protobuf/flagd/evaluation/v1/evaluation.proto",
+    "schemas/protobuf/flagd/evaluation/v2/evaluation.proto",
     "schemas/protobuf/flagd/sync/v1/sync.proto",
     "build.rs",
     "src/*",

@@ -249,6 +249,9 @@ impl GrpcStreamConnector {
         debug!("Using authority: {:?}", self.authority);
         // Reuse channel for better performance - avoids connection overhead on reconnects
         let mut client = FlagSyncServiceClient::new(channel);
+        // shortcut: `selector` is deprecated in favour of the `Flagd-Selector` header but flagd
+        // still honours it; switch to the header in a separate change.
+        #[allow(deprecated)]
         let request = tonic::Request::new(SyncFlagsRequest {
             provider_id: self.provider_id.clone(),
             selector: self.selector.clone().unwrap_or_default(),
