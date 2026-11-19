@@ -497,7 +497,6 @@ async fn targeting_test() {
                 && !has_tag("fractional-v2")
                 && !has_tag("non-existent-evaluator-ref")
                 && !has_tag("semver-edge-cases")
-                && !(has_tag("operator-errors") && has_tag("string"))
         })
         .await;
 }
