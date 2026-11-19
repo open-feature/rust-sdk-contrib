@@ -1,10 +1,26 @@
 use datalogic_rs::bumpalo::Bump;
 use datalogic_rs::operator::EvalContext;
 use datalogic_rs::{ArenaExt, CustomOperator, DataValue};
-use semver::Version;
+use semver::{BuildMetadata, Version};
 use tracing::debug;
 
 pub struct SemVerOperator;
+
+/// Parses a version leniently: an optional `v`/`V` prefix and missing minor/patch parts
+/// (`1`, `1.0`) are accepted. Build metadata is dropped because it never affects precedence.
+fn parse_version(input: &str) -> Option<Version> {
+    let s = input.trim();
+    let s = s.strip_prefix(['v', 'V']).unwrap_or(s);
+    let (core, suffix) = s.split_at(s.find(['-', '+']).unwrap_or(s.len()));
+    let padded = match core.matches('.').count() {
+        0 => format!("{core}.0.0"),
+        1 => format!("{core}.0"),
+        _ => core.to_string(),
+    };
+    let mut version = Version::parse(&format!("{padded}{suffix}")).ok()?;
+    version.build = BuildMetadata::EMPTY;
+    Some(version)
+}
 
 impl CustomOperator for SemVerOperator {
     fn evaluate<'a>(
@@ -22,6 +38,13 @@ impl CustomOperator for SemVerOperator {
         let resolve_value = |arg: &DataValue<'a>| -> Option<String> {
             if let Some(s) = arg.as_str() {
                 return Some(s.to_string());
+            }
+            // Numeric context values (e.g. `1` or `1.2`) are treated as partial versions.
+            if let Some(i) = arg.as_i64() {
+                return Some(i.to_string());
+            }
+            if let Some(f) = arg.as_f64() {
+                return Some(f.to_string());
             }
 
             // Custom operator arguments are pre-evaluated by datalogic-rs 5.x.
@@ -53,12 +76,9 @@ impl CustomOperator for SemVerOperator {
             }
         };
 
-        let version1 = match Version::parse(&version1_str) {
-            Ok(v) => v,
-            Err(e) => {
-                debug!("Failed to parse first version: {:?}: {}", version1_str, e);
-                return Ok(arena.null());
-            }
+        let Some(version1) = parse_version(&version1_str) else {
+            debug!("Failed to parse first version: {:?}", version1_str);
+            return Ok(arena.null());
         };
 
         let operator = match args[1].as_str() {
@@ -80,12 +100,9 @@ impl CustomOperator for SemVerOperator {
             }
         };
 
-        let version2 = match Version::parse(&version2_str) {
-            Ok(v) => v,
-            Err(e) => {
-                debug!("Failed to parse second version: {:?}: {}", version2_str, e);
-                return Ok(arena.null());
-            }
+        let Some(version2) = parse_version(&version2_str) else {
+            debug!("Failed to parse second version: {:?}", version2_str);
+            return Ok(arena.null());
         };
 
         debug!("Comparing {} {} {}", version1, operator, version2);
@@ -106,5 +123,21 @@ impl CustomOperator for SemVerOperator {
 
         debug!("SemVer comparison result: {}", result);
         Ok(arena.bool(result))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_version;
+
+    #[test]
+    fn parse_version_accepts_lenient_forms() {
+        for s in ["1.0.0", "v1.0.0", "V1.0.0", "1.0", "1", "1.0.0+build"] {
+            assert_eq!(parse_version(s), parse_version("1.0.0"), "{s}");
+        }
+        assert!(parse_version("1.2.3-rc.1").unwrap() < parse_version("1.2.3").unwrap());
+        assert!(parse_version("1.2").unwrap() > parse_version("1.1.9").unwrap());
+        assert!(parse_version("not-a-version").is_none());
+        assert!(parse_version("").is_none());
     }
 }
