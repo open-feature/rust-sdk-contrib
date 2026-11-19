@@ -190,7 +190,9 @@ impl CustomOperator for StartsWithOperator {
         _context: &mut EvalContext<'_, 'a>,
         arena: &'a Bump,
     ) -> datalogic_rs::Result<&'a DataValue<'a>> {
-        Ok(arena.bool(string_op(args, |text, pattern| text.starts_with(pattern))))
+        Ok(string_op(args, arena, |text, pattern| {
+            text.starts_with(pattern)
+        }))
     }
 }
 
@@ -201,18 +203,24 @@ impl CustomOperator for EndsWithOperator {
         _context: &mut EvalContext<'_, 'a>,
         arena: &'a Bump,
     ) -> datalogic_rs::Result<&'a DataValue<'a>> {
-        Ok(arena.bool(string_op(args, |text, pattern| text.ends_with(pattern))))
+        Ok(string_op(args, arena, |text, pattern| {
+            text.ends_with(pattern)
+        }))
     }
 }
 
-fn string_op(args: &[&DataValue<'_>], op: impl Fn(&str, &str) -> bool) -> bool {
-    let [text, pattern, ..] = args else {
-        return false;
-    };
-
-    match (text.as_str(), pattern.as_str()) {
-        (Some(text), Some(pattern)) => op(text, pattern),
-        _ => false,
+/// Returns null (not false) for non-string inputs or too few arguments, per the flagd spec.
+fn string_op<'a>(
+    args: &[&'a DataValue<'a>],
+    arena: &'a Bump,
+    op: impl Fn(&str, &str) -> bool,
+) -> &'a DataValue<'a> {
+    match args {
+        [text, pattern, ..] => match (text.as_str(), pattern.as_str()) {
+            (Some(text), Some(pattern)) => arena.bool(op(text, pattern)),
+            _ => arena.null(),
+        },
+        _ => arena.null(),
     }
 }
 
